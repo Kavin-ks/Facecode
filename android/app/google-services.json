@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "241739364015",
+    "project_id": "facecode-411fa",
+    "storage_bucket": "facecode-411fa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:241739364015:android:d4a1d4d268a51b3540865a",
+        "android_client_info": {
+          "package_name": "com.kavin.facecode"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCKzqGKNKpXKnS7Usw6GnTEEhuRZGVpHRc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
