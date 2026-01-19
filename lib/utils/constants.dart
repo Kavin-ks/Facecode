@@ -13,33 +13,98 @@ class AppConstants {
   static const double defaultPadding = 16.0;
   static const double smallPadding = 8.0;
   static const double largePadding = 24.0;
-  static const double borderRadius = 12.0;
+  static const double xlPadding = 32.0;
+  static const double borderRadius = 16.0;
+  static const double borderRadiusSmall = 12.0;
+  static const double borderRadiusLarge = 24.0;
   static const double buttonHeight = 56.0;
+  static const double cardElevation = 8.0;
 
   // Animation Durations
-  static const Duration splashDuration = Duration(seconds: 2);
+  static const Duration splashDuration = Duration(milliseconds: 2500);
   static const Duration animationDuration = Duration(milliseconds: 300);
+  static const Duration animationFast = Duration(milliseconds: 150);
+  static const Duration animationSlow = Duration(milliseconds: 500);
 
-  // Colors (Dark Theme)
-  static const Color primaryColor = Color(0xFF6C63FF);
-  static const Color secondaryColor = Color(0xFF00D9FF);
-  static const Color accentNeon = Color(0xFFFF3DFF);
-  static const Color backgroundColor = Color(0xFF121212);
-  static const Color surfaceColor = Color(0xFF1E1E1E);
+  // Colors (Dark Gaming Theme)
+  static const Color primaryColor = Color(0xFF7C4DFF);      // Vibrant purple
+  static const Color secondaryColor = Color(0xFF00E5FF);    // Cyan neon
+  static const Color accentNeon = Color(0xFFFF4081);        // Pink neon
+  static const Color accentGold = Color(0xFFFFD700);        // Gold for wins
+  static const Color backgroundColor = Color(0xFF0D0D12);   // Deep dark
+  static const Color surfaceColor = Color(0xFF1A1A24);      // Card surface
+  static const Color surfaceLight = Color(0xFF252535);      // Lighter surface
   static const Color errorColor = Color(0xFFFF5252);
-  static const Color successColor = Color(0xFF4CAF50);
+  static const Color successColor = Color(0xFF00E676);
+  static const Color warningColor = Color(0xFFFFAB00);
   static const Color textPrimary = Color(0xFFFFFFFF);
-  static const Color textSecondary = Color(0xFFB0B0B0);
+  static const Color textSecondary = Color(0xFF9E9EAE);
+  static const Color textMuted = Color(0xFF6B6B7B);
 
-  static const List<Color> softBackgroundGradient = [
-    Color(0xFF0F0F14),
+  // Semantic aliases used by premium UI
+  static const Color neonPink = accentNeon;
+  static const Color neonBlue = secondaryColor;
+  static const Color goldAccent = accentGold;
+
+  // Neutral border used across premium cards/fields
+  static const Color borderColor = Color(0xFF2E2E3F);
+
+  // Gradients
+  static const List<Color> backgroundGradient = [
+    Color(0xFF0D0D12),
     Color(0xFF12121C),
-    Color(0xFF0E121A),
+    Color(0xFF0A0F18),
   ];
 
-  static const List<Color> neonHeaderGradient = [
-    Color(0xFF6C63FF),
-    Color(0xFF00D9FF),
+  static const List<Color> primaryGradient = [
+    Color(0xFF7C4DFF),
+    Color(0xFF536DFE),
+  ];
+
+  static const List<Color> neonGradient = [
+    Color(0xFF7C4DFF),
+    Color(0xFF00E5FF),
+  ];
+
+  // Premium CTA gradient
+  static const List<Color> premiumGradient = [
+    primaryColor,
+    accentNeon,
+  ];
+
+  static const List<Color> accentGradient = [
+    Color(0xFFFF4081),
+    Color(0xFFFF6E40),
+  ];
+
+  static const List<Color> goldGradient = [
+    Color(0xFFFFD700),
+    Color(0xFFFFA000),
+  ];
+
+  // Box Shadows for depth
+  static List<BoxShadow> get cardShadow => [
+    BoxShadow(
+      color: primaryColor.withAlpha(40),
+      blurRadius: 20,
+      offset: const Offset(0, 8),
+    ),
+  ];
+
+  static List<BoxShadow> get neonGlow => [
+    BoxShadow(
+      color: primaryColor.withAlpha(80),
+      blurRadius: 30,
+      spreadRadius: 2,
+    ),
+  ];
+
+  static List<BoxShadow> get cyanGlow => [
+    BoxShadow(
+      color: secondaryColor.withAlpha(60),
+      blurRadius: 20,
+      spreadRadius: 1,
+    ),
   ];
 
   // Emoji Picker

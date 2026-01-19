@@ -45,3 +45,72 @@ Install dependencies:
 
 ```bash
 flutter pub get
+
+Android
+flutter run -d android
+
+iOS
+flutter run -d ios
+
+Or simply
+flutter run
+
+ How to Play
+
+Create a room
+
+Add players in the lobby
+
+Host starts the game
+
+Tap Active Player to choose who holds the phone
+
+Emoji player sends emojis only
+
+Guessers type their answers
+
+Each round lasts 60 seconds
+
+Emoji player changes every round
+
+ Multiplayer Modes
+Offline Mode
+
+Same phone
+
+Pass the device around
+
+No internet needed
+
+Wi-Fi Mode
+
+All players must be on the same Wi-Fi network
+
+Automatic device discovery
+
+Manual room code option if discovery fails
+
+🔧 Wi-Fi Troubleshooting
+
+Make sure Wi-Fi is ON
+
+Both devices must be on the same network
+
+Use room code if auto-discovery fails
+
+On iOS, allow Local Network Access when prompted
+
+📱 App Info
+
+App Name: FaceCode
+
+Platforms: Android & iOS
+
+Author
+
+Built by Kavin
+A fun project made for learning and hackathons 🚀
+
+ Support
+
+If you like this project, consider giving it a ⭐ on GitHub!

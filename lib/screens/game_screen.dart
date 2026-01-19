@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 
@@ -10,7 +11,7 @@ import 'package:facecode/utils/constants.dart';
 import 'package:facecode/widgets/emoji_picker.dart';
 import 'package:facecode/widgets/error_listener.dart';
 
-/// Main gameplay screen.
+/// Premium main gameplay screen.
 ///
 /// - Emoji player can only communicate using emojis.
 /// - Guessers can type guesses.
@@ -22,13 +23,24 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> {
+class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateMixin {
   final TextEditingController _guessController = TextEditingController();
   bool _wrongGuessPulse = false;
+  late AnimationController _timerPulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _timerPulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+  }
 
   @override
   void dispose() {
     _guessController.dispose();
+    _timerPulseController.dispose();
     super.dispose();
   }
 
@@ -37,10 +49,14 @@ class _GameScreenState extends State<GameScreen> {
     final room = provider.currentRoom;
     if (room == null) return;
 
+    HapticFeedback.lightImpact();
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       backgroundColor: AppConstants.surfaceColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) {
         return SafeArea(
           child: Column(
@@ -48,36 +64,85 @@ class _GameScreenState extends State<GameScreen> {
             children: [
               Padding(
                 padding: const EdgeInsets.all(AppConstants.defaultPadding),
-                child: Text(
-                  'Who is holding the phone?',
-                  style: Theme.of(context).textTheme.titleLarge,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.swap_horiz, color: AppConstants.primaryColor),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Switch Player',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               ...room.players.map((p) {
                 final isActive = provider.currentPlayer?.id == p.id;
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: AppConstants.primaryColor,
-                    child: Text(
-                      p.name.isEmpty ? '?' : p.name[0].toUpperCase(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
+                final isEmoji = room.isEmojiPlayer(p.id);
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isActive 
+                        ? AppConstants.primaryColor.withAlpha(20) 
+                        : AppConstants.backgroundColor.withAlpha(100),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isActive 
+                          ? AppConstants.primaryColor.withAlpha(100) 
+                          : AppConstants.borderColor,
                     ),
                   ),
-                  title: Text(p.name),
-                  subtitle: Text(room.isEmojiPlayer(p.id) ? 'Emoji player' : 'Guesser'),
-                  trailing: isActive
-                      ? const Icon(Icons.check, color: AppConstants.secondaryColor)
-                      : null,
-                  onTap: () {
-                    provider.setActivePlayer(p.id);
-                    Navigator.of(context).pop();
-                  },
+                  child: ListTile(
+                    leading: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        gradient: isActive
+                            ? const LinearGradient(colors: AppConstants.premiumGradient)
+                            : null,
+                        color: isActive ? null : AppConstants.surfaceColor,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Center(
+                        child: Text(
+                          p.name.isEmpty ? '?' : p.name[0].toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+                    title: Text(
+                      p.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      isEmoji ? '😎 Emoji player' : '⌨️ Guesser',
+                      style: TextStyle(
+                        color: isEmoji ? AppConstants.neonPink : AppConstants.textMuted,
+                      ),
+                    ),
+                    trailing: isActive
+                        ? Icon(Icons.check_circle, color: AppConstants.successColor)
+                        : null,
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      provider.setActivePlayer(p.id);
+                      Navigator.of(context).pop();
+                    },
+                  ),
                 );
               }),
-              const SizedBox(height: AppConstants.defaultPadding),
+              const SizedBox(height: AppConstants.largePadding),
             ],
           ),
         );
@@ -94,11 +159,13 @@ class _GameScreenState extends State<GameScreen> {
 
     final ok = provider.submitGuess(_guessController.text, player.id);
     if (ok) {
+      HapticFeedback.heavyImpact();
       _guessController.clear();
       return;
     }
 
-    // Wrong guess micro-interaction.
+    // Wrong guess micro-interaction
+    HapticFeedback.lightImpact();
     setState(() {
       _wrongGuessPulse = true;
     });
@@ -141,322 +208,656 @@ class _GameScreenState extends State<GameScreen> {
 
           final isEmojiPlayer = room.isEmojiPlayer(activePlayer.id);
           final prompt = room.currentPrompt;
+          final timeRemaining = room.roundTimeRemaining;
+          final isLowTime = timeRemaining <= 10;
 
           return Scaffold(
-            appBar: AppBar(
-              title: const Text('FaceCode'),
-              actions: [
-                Padding(
-                  padding: const EdgeInsets.only(right: AppConstants.smallPadding),
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppConstants.surfaceColor,
-                        borderRadius:
-                            BorderRadius.circular(AppConstants.borderRadius),
-                        border: Border.all(
-                          color: AppConstants.primaryColor.withAlpha(102),
-                        ),
-                      ),
-                      child: Text(
-                        '⏱️ ${room.roundTimeRemaining}s',
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                    ).animate().fadeIn().slideX(begin: 0.1, end: 0),
-                  ),
+            body: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFF0D0D12),
+                    Color(0xFF1A1A2E),
+                    Color(0xFF0D0D12),
+                  ],
                 ),
-              ],
-            ),
-            body: Stack(
-              children: [
-                // Background gradient
-                Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: AppConstants.softBackgroundGradient,
-                    ),
-                  ),
-                ),
-                SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppConstants.defaultPadding),
+              ),
+              child: Stack(
+                children: [
+                  SafeArea(
+                    bottom: false,
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Active player selector
-                        InkWell(
-                          onTap: () => _selectActivePlayer(context),
-                          borderRadius:
-                              BorderRadius.circular(AppConstants.borderRadius),
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppConstants.surfaceColor,
-                              borderRadius: BorderRadius.circular(
-                                AppConstants.borderRadius,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    'Active: ${activePlayer.name}',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleLarge
-                                        ?.copyWith(fontSize: 16),
-                                  ),
-                                ),
-                                Text(
-                                  isEmojiPlayer ? '😎 Emoji Player' : '⌨️ Guesser',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyLarge
-                                      ?.copyWith(
-                                        color: isEmojiPlayer
-                                            ? AppConstants.secondaryColor
-                                            : AppConstants.textSecondary,
-                                      ),
-                                ),
-                                const SizedBox(width: 8),
-                                const Icon(Icons.swap_horiz),
-                              ],
-                            ),
-                          ),
-                        ).animate().fadeIn(),
-
-                        const SizedBox(height: AppConstants.defaultPadding),
-
-                        // Prompt (emoji player only)
-                        if (isEmojiPlayer)
-                          Container(
-                            padding: const EdgeInsets.all(AppConstants.defaultPadding),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  AppConstants.primaryColor.withAlpha(46),
-                                  AppConstants.secondaryColor.withAlpha(31),
-                                ],
-                              ),
-                              borderRadius:
-                                  BorderRadius.circular(AppConstants.borderRadius),
-                              border: Border.all(
-                                color: AppConstants.primaryColor.withAlpha(89),
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Your Secret Prompt',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleLarge
-                                      ?.copyWith(color: AppConstants.textPrimary),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  '${prompt?.category ?? ''} • ${prompt?.difficulty.name ?? ''}'.toUpperCase(),
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.copyWith(color: AppConstants.textSecondary),
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  prompt?.text ?? '',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .headlineSmall
-                                      ?.copyWith(fontWeight: FontWeight.w700),
-                                ),
-                              ],
-                            ),
-                          ).animate().fadeIn().slideY(begin: 0.06, end: 0)
-                        else
-                          Container(
-                            padding: const EdgeInsets.all(AppConstants.defaultPadding),
-                            decoration: BoxDecoration(
-                              color: AppConstants.surfaceColor,
-                              borderRadius:
-                                  BorderRadius.circular(AppConstants.borderRadius),
-                            ),
-                            child: Row(
-                              children: [
-                                const Text('🔒', style: TextStyle(fontSize: 22)),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'Prompt is hidden. Watch the emojis and guess!',
-                                    style: Theme.of(context).textTheme.bodyLarge,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ).animate().fadeIn().slideY(begin: 0.06, end: 0),
-
-                        const SizedBox(height: AppConstants.defaultPadding),
-
-                        // Emoji trail
+                        // Custom App Bar
+                        _buildGameAppBar(context, timeRemaining, isLowTime),
+                        
+                        // Main Content
                         Expanded(
-                          child: Container(
+                          child: SingleChildScrollView(
                             padding: const EdgeInsets.all(AppConstants.defaultPadding),
-                            decoration: BoxDecoration(
-                              color: AppConstants.surfaceColor,
-                              borderRadius:
-                                  BorderRadius.circular(AppConstants.borderRadius),
-                            ),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      'Emoji Trail',
-                                      style: Theme.of(context).textTheme.titleLarge,
-                                    ),
-                                    const Spacer(),
-                                    if (isEmojiPlayer)
-                                      TextButton.icon(
-                                        onPressed: () => provider.clearEmojiMessages(),
-                                        icon: const Icon(Icons.delete_outline),
-                                        label: const Text('Clear'),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: AppConstants.smallPadding),
-                                Expanded(
-                                  child: SingleChildScrollView(
-                                    child: Wrap(
-                                      spacing: 10,
-                                      runSpacing: 10,
-                                      children: [
-                                        for (final e in room.emojiMessages)
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 14,
-                                              vertical: 10,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: AppConstants.backgroundColor,
-                                              borderRadius: BorderRadius.circular(16),
-                                              border: Border.all(
-                                                color:
-                                                    AppConstants.primaryColor.withAlpha(64),
-                                              ),
-                                            ),
-                                            child: Text(
-                                              e,
-                                              style: const TextStyle(fontSize: 30),
-                                            ),
-                                          ).animate().fadeIn().scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
+                                // Active player selector
+                                _buildPlayerSelector(activePlayer, isEmojiPlayer),
+
+                                const SizedBox(height: AppConstants.defaultPadding),
+
+                                // Prompt section
+                                if (isEmojiPlayer)
+                                  _buildSecretPrompt(prompt)
+                                else
+                                  _buildHiddenPrompt(),
+
+                                const SizedBox(height: AppConstants.defaultPadding),
+
+                                // Emoji trail
+                                _buildEmojiTrail(room, isEmojiPlayer, provider),
+
+                                const SizedBox(height: AppConstants.defaultPadding),
+
+                                // Guess input (guessers only)
+                                if (!isEmojiPlayer)
+                                  _buildGuessInput()
+                                else
+                                  _buildEmojiOnlyNotice(),
+                                
+                                // Space for bottom sheet
+                                if (isEmojiPlayer)
+                                  const SizedBox(height: 280),
                               ],
                             ),
                           ),
                         ),
-
-                        const SizedBox(height: AppConstants.defaultPadding),
-
-                        // Guess input (guessers only)
-                        if (!isEmojiPlayer)
-                          AnimatedContainer(
-                            duration: 250.ms,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppConstants.surfaceColor,
-                              borderRadius:
-                                  BorderRadius.circular(AppConstants.borderRadius),
-                              border: Border.all(
-                                color: _wrongGuessPulse
-                                    ? AppConstants.errorColor
-                                    : Colors.transparent,
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: _guessController,
-                                    decoration: const InputDecoration(
-                                      hintText: 'Type your guess…',
-                                      prefixIcon: Icon(Icons.help_outline),
-                                    ),
-                                    textInputAction: TextInputAction.done,
-                                    onSubmitted: (_) => _submitGuess(context),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                ElevatedButton(
-                                  onPressed: () => _submitGuess(context),
-                                  style: ElevatedButton.styleFrom(
-                                    minimumSize: const Size(120, 56),
-                                  ),
-                                  child: const Text('Guess'),
-                                ),
-                              ],
-                            ),
-                          ).animate().fadeIn().slideY(begin: 0.08, end: 0)
-                        else
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppConstants.surfaceColor,
-                              borderRadius:
-                                  BorderRadius.circular(AppConstants.borderRadius),
-                              border: Border.all(
-                                color: AppConstants.secondaryColor.withAlpha(89),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                const Text('🚫', style: TextStyle(fontSize: 18)),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'Text input is disabled for the emoji player.',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyLarge
-                                        ?.copyWith(color: AppConstants.textSecondary),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ).animate().fadeIn(),
                       ],
                     ),
                   ),
-                ),
 
-                // Loading overlay
-                if (provider.isBusy)
-                  Container(
-                    color: Colors.black.withAlpha(102),
-                    child: const Center(
-                      child: CircularProgressIndicator(),
+                  // Loading overlay
+                  if (provider.isBusy)
+                    Container(
+                      color: Colors.black.withAlpha(150),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: AppConstants.primaryColor,
+                        ),
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
             bottomSheet: isEmojiPlayer
                 ? EmojiPicker(
-                    onEmojiSelected: (emoji) => provider.sendEmoji(emoji),
+                    onEmojiSelected: (emoji) {
+                      HapticFeedback.selectionClick();
+                      provider.sendEmoji(emoji);
+                    },
                   )
                 : null,
           );
         },
       ),
     );
+  }
+
+  Widget _buildGameAppBar(BuildContext context, int timeRemaining, bool isLowTime) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          // Logo
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppConstants.surfaceColor.withAlpha(150),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppConstants.borderColor),
+            ),
+            child: Row(
+              children: [
+                const Text('😎', style: TextStyle(fontSize: 20)),
+                const SizedBox(width: 8),
+                ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: AppConstants.neonGradient,
+                  ).createShader(bounds),
+                  child: const Text(
+                    'FaceCode',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          const Spacer(),
+          
+          // Timer
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              gradient: isLowTime
+                  ? const LinearGradient(
+                      colors: [Color(0xFFFF416C), Color(0xFFFF4B2B)],
+                    )
+                  : null,
+              color: isLowTime ? null : AppConstants.surfaceColor.withAlpha(150),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isLowTime 
+                    ? Colors.transparent 
+                    : AppConstants.borderColor,
+              ),
+              boxShadow: isLowTime
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFFFF416C).withAlpha(60),
+                        blurRadius: 12,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.timer_outlined,
+                  color: isLowTime ? Colors.white : AppConstants.textMuted,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${timeRemaining}s',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          )
+              .animate(
+                target: isLowTime ? 1 : 0,
+                onPlay: (controller) {
+                  if (isLowTime) controller.repeat(reverse: true);
+                },
+              )
+              .scale(
+                begin: const Offset(1, 1),
+                end: const Offset(1.05, 1.05),
+                duration: 500.ms,
+              ),
+        ],
+      ),
+    ).animate().fadeIn().slideY(begin: -0.2, end: 0);
+  }
+
+  Widget _buildPlayerSelector(dynamic activePlayer, bool isEmojiPlayer) {
+    return GestureDetector(
+      onTap: () => _selectActivePlayer(context),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppConstants.surfaceColor.withAlpha(150),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppConstants.borderColor),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: AppConstants.premiumGradient),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Text(
+                  activePlayer.name[0].toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    activePlayer.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Tap to switch player',
+                    style: TextStyle(
+                      color: AppConstants.textMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: isEmojiPlayer 
+                    ? AppConstants.neonPink.withAlpha(30) 
+                    : AppConstants.neonBlue.withAlpha(30),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                isEmojiPlayer ? '😎 Emoji' : '⌨️ Guesser',
+                style: TextStyle(
+                  color: isEmojiPlayer ? AppConstants.neonPink : AppConstants.neonBlue,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.swap_horiz, color: AppConstants.textMuted, size: 22),
+          ],
+        ),
+      ),
+    ).animate().fadeIn();
+  }
+
+  Widget _buildSecretPrompt(dynamic prompt) {
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.largePadding),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppConstants.primaryColor.withAlpha(30),
+            AppConstants.secondaryColor.withAlpha(20),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppConstants.primaryColor.withAlpha(80),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppConstants.primaryColor.withAlpha(30),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppConstants.primaryColor.withAlpha(30),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Text('🤫', style: TextStyle(fontSize: 20)),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'YOUR SECRET PROMPT',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppConstants.surfaceColor.withAlpha(100),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '${prompt?.category ?? ''} • ${prompt?.difficulty.name ?? ''}'.toUpperCase(),
+              style: TextStyle(
+                color: AppConstants.goldAccent,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(
+              colors: AppConstants.neonGradient,
+            ).createShader(bounds),
+            child: Text(
+              prompt?.text ?? '',
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn().slideY(begin: 0.06, end: 0);
+  }
+
+  Widget _buildHiddenPrompt() {
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.largePadding),
+      decoration: BoxDecoration(
+        color: AppConstants.surfaceColor.withAlpha(150),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppConstants.borderColor),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppConstants.neonBlue.withAlpha(30),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text('🔒', style: TextStyle(fontSize: 24)),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Secret Prompt Hidden',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Watch the emojis and guess the word!',
+                  style: TextStyle(
+                    color: AppConstants.textMuted,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn().slideY(begin: 0.06, end: 0);
+  }
+
+  Widget _buildEmojiTrail(GameRoom room, bool isEmojiPlayer, GameProvider provider) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 180),
+      padding: const EdgeInsets.all(AppConstants.largePadding),
+      decoration: BoxDecoration(
+        color: AppConstants.surfaceColor.withAlpha(150),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppConstants.borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.emoji_emotions, color: AppConstants.goldAccent, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'EMOJI TRAIL',
+                style: TextStyle(
+                  color: AppConstants.goldAccent,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              const Spacer(),
+              if (isEmojiPlayer)
+                GestureDetector(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    provider.clearEmojiMessages();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppConstants.errorColor.withAlpha(30),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline, color: AppConstants.errorColor, size: 16),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Clear',
+                          style: TextStyle(
+                            color: AppConstants.errorColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppConstants.defaultPadding),
+          if (room.emojiMessages.isEmpty)
+            Center(
+              child: Column(
+                children: [
+                  Text(
+                    '🎭',
+                    style: TextStyle(fontSize: 40),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No emojis yet...',
+                    style: TextStyle(
+                      color: AppConstants.textMuted,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final e in room.emojiMessages)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppConstants.backgroundColor.withAlpha(150),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: AppConstants.primaryColor.withAlpha(50),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppConstants.primaryColor.withAlpha(20),
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      e,
+                      style: const TextStyle(fontSize: 32),
+                    ),
+                  )
+                      .animate()
+                      .fadeIn()
+                      .scale(
+                        begin: const Offset(0.8, 0.8),
+                        end: const Offset(1, 1),
+                        curve: Curves.elasticOut,
+                      ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGuessInput() {
+    return AnimatedContainer(
+      duration: 250.ms,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppConstants.surfaceColor.withAlpha(150),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: _wrongGuessPulse
+              ? AppConstants.errorColor
+              : AppConstants.borderColor,
+          width: _wrongGuessPulse ? 2 : 1,
+        ),
+        boxShadow: _wrongGuessPulse
+            ? [
+                BoxShadow(
+                  color: AppConstants.errorColor.withAlpha(40),
+                  blurRadius: 16,
+                  spreadRadius: 2,
+                ),
+              ]
+            : null,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppConstants.backgroundColor.withAlpha(100),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: TextField(
+                controller: _guessController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Type your guess…',
+                  hintStyle: TextStyle(color: AppConstants.textMuted),
+                  prefixIcon: Icon(Icons.lightbulb_outline, color: AppConstants.textMuted, size: 20),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                ),
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _submitGuess(context),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          GestureDetector(
+            onTap: () => _submitGuess(context),
+            child: Container(
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: AppConstants.premiumGradient),
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppConstants.primaryColor.withAlpha(60),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Center(
+                child: Text(
+                  'GUESS',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn().slideY(begin: 0.08, end: 0);
+  }
+
+  Widget _buildEmojiOnlyNotice() {
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.largePadding),
+      decoration: BoxDecoration(
+        color: AppConstants.neonPink.withAlpha(15),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: AppConstants.neonPink.withAlpha(50),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppConstants.neonPink.withAlpha(30),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text('🚫', style: TextStyle(fontSize: 20)),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Emoji Only Mode',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Use the emoji picker below to communicate!',
+                  style: TextStyle(
+                    color: AppConstants.textMuted,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn();
   }
 }

@@ -50,19 +50,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
+        backgroundColor: AppConstants.surfaceColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withAlpha(30),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.logout, color: Colors.red, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text('Logout', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to logout?',
+          style: TextStyle(color: AppConstants.textMuted),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: AppConstants.textMuted)),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFF416C), Color(0xFFFF4B2B)],
+              ),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: const Text('Logout'),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => Navigator.pop(context, true),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  child: Text('Logout', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -89,181 +119,312 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = auth.user;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _confirmLogout,
-          )
-        ],
-      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: AppConstants.softBackgroundGradient,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF0D0D12),
+              Color(0xFF1A1A2E),
+              Color(0xFF0D0D12),
+            ],
           ),
         ),
         child: SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(AppConstants.largePadding),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Avatar
-                Center(
-                  child: CircleAvatar(
-                    radius: 50,
-                    backgroundColor: AppConstants.primaryColor,
-                    child: Text(
-                      user?.initial ?? '?',
-                      style: const TextStyle(
-                        fontSize: 40,
-                        fontWeight: FontWeight.bold,
+                // Back button
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppConstants.surfaceColor.withAlpha(150),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppConstants.borderColor),
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back_ios_new,
                         color: Colors.white,
+                        size: 20,
                       ),
                     ),
-                  )
-                      .animate()
-                      .scale(duration: 400.ms, curve: Curves.easeOutBack),
-                ),
+                  ),
+                ).animate().fadeIn().slideX(begin: -0.2, end: 0),
+                
+                const SizedBox(height: 30),
+                
+                // Avatar with glow
+                Center(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppConstants.primaryColor.withAlpha(80),
+                          blurRadius: 30,
+                          spreadRadius: 5,
+                        ),
+                      ],
+                    ),
+                    child: Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(colors: AppConstants.premiumGradient),
+                        border: Border.all(
+                          color: AppConstants.primaryColor.withAlpha(100),
+                          width: 3,
+                        ),
+                      ),
+                      child: Center(
+                        child: Text(
+                          user?.initial ?? '?',
+                          style: const TextStyle(
+                            fontSize: 48,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+                    .animate()
+                    .scale(duration: 500.ms, curve: Curves.elasticOut)
+                    .fadeIn(),
                 
                 const SizedBox(height: AppConstants.largePadding),
                 
-                // Display name
-                Text(
-                  user?.displayName ?? 'User',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
+                // Display name with gradient
+                Center(
+                  child: ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: AppConstants.neonGradient,
+                    ).createShader(bounds),
+                    child: Text(
+                      user?.displayName ?? 'User',
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
-                  textAlign: TextAlign.center,
                 )
                     .animate()
                     .fadeIn(delay: 100.ms),
                 
-                const SizedBox(height: AppConstants.smallPadding),
+                const SizedBox(height: 8),
                 
                 // Email
                 if (user?.email.isNotEmpty == true)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.email, size: 18, color: AppConstants.textSecondary),
-                      const SizedBox(width: 8),
-                      Text(
-                        user!.email,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: AppConstants.textSecondary,
-                        ),
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppConstants.surfaceColor.withAlpha(100),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppConstants.borderColor),
                       ),
-                    ],
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.email_outlined, size: 16, color: AppConstants.textMuted),
+                          const SizedBox(width: 8),
+                          Text(
+                            user!.email,
+                            style: TextStyle(
+                              color: AppConstants.textMuted,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   )
                       .animate()
                       .fadeIn(delay: 150.ms),
                 
-                // Email (if available)
-                if (user?.email.isNotEmpty == true)
-                  Padding(
-                    padding: const EdgeInsets.only(top: AppConstants.smallPadding),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.email_outlined, size: 18, color: AppConstants.textSecondary),
-                        const SizedBox(width: 8),
-                        Text(
-                          user!.email,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppConstants.textSecondary,
-                          ),
-                        ),
-                      ],
-                    )
-                        .animate()
-                        .fadeIn(delay: 200.ms),
-                  ),
-                
-                const SizedBox(height: AppConstants.largePadding * 2),
+                const SizedBox(height: AppConstants.xlPadding),
                 
                 // Stats card
-                Card(
-                  elevation: 4,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                Container(
+                  padding: const EdgeInsets.all(AppConstants.largePadding),
+                  decoration: BoxDecoration(
+                    color: AppConstants.surfaceColor.withAlpha(150),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: AppConstants.borderColor),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppConstants.largePadding),
-                    child: _loading
-                        ? const Center(child: CircularProgressIndicator())
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Game Stats',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: AppConstants.defaultPadding),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _StatItem(
-                                      icon: Icons.sports_esports,
-                                      label: 'Games',
-                                      value: '$_gamesPlayed',
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _StatItem(
-                                      icon: Icons.emoji_events,
-                                      label: 'Wins',
-                                      value: '$_wins',
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _StatItem(
-                                      icon: Icons.percent,
-                                      label: 'Win Rate',
-                                      value: _gamesPlayed > 0
-                                          ? '${((_wins / _gamesPlayed) * 100).toStringAsFixed(0)}%'
-                                          : '0%',
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                  child: _loading
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(20),
+                            child: CircularProgressIndicator(
+                              color: AppConstants.primaryColor,
+                            ),
                           ),
+                        )
+                      : Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.bar_chart_rounded, color: AppConstants.goldAccent, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'GAME STATS',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppConstants.goldAccent,
+                                    letterSpacing: 2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: AppConstants.largePadding),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _PremiumStatItem(
+                                    icon: Icons.sports_esports,
+                                    label: 'Games',
+                                    value: '$_gamesPlayed',
+                                    color: AppConstants.neonBlue,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: _PremiumStatItem(
+                                    icon: Icons.emoji_events,
+                                    label: 'Wins',
+                                    value: '$_wins',
+                                    color: AppConstants.goldAccent,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: _PremiumStatItem(
+                                    icon: Icons.percent,
+                                    label: 'Win Rate',
+                                    value: _gamesPlayed > 0
+                                        ? '${((_wins / _gamesPlayed) * 100).toStringAsFixed(0)}%'
+                                        : '0%',
+                                    color: AppConstants.neonPink,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                )
+                    .animate()
+                    .fadeIn(delay: 200.ms)
+                    .slideY(begin: 0.1, end: 0),
+                
+                const SizedBox(height: AppConstants.xlPadding),
+                
+                // Achievement teaser
+                Container(
+                  padding: const EdgeInsets.all(AppConstants.largePadding),
+                  decoration: BoxDecoration(
+                    color: AppConstants.surfaceColor.withAlpha(100),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppConstants.borderColor),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppConstants.goldAccent.withAlpha(30),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.emoji_events,
+                          color: AppConstants.goldAccent,
+                          size: 28,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Keep Playing!',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Achievements coming soon...',
+                              style: TextStyle(
+                                color: AppConstants.textMuted,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 )
                     .animate()
                     .fadeIn(delay: 300.ms)
                     .slideY(begin: 0.1, end: 0),
                 
-                const Spacer(),
+                const SizedBox(height: AppConstants.xlPadding),
                 
                 // Logout button
-                ElevatedButton.icon(
-                  onPressed: _confirmLogout,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red.shade700,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                GestureDetector(
+                  onTap: _confirmLogout,
+                  child: Container(
+                    height: 56,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFFF416C), Color(0xFFFF4B2B)],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFFF416C).withAlpha(60),
+                          blurRadius: 20,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                  ),
-                  icon: const Icon(Icons.logout),
-                  label: const Text(
-                    'Logout',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.logout, color: Colors.white, size: 22),
+                        SizedBox(width: 12),
+                        Text(
+                          'LOGOUT',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 )
                     .animate()
                     .fadeIn(delay: 400.ms),
                 
-                const SizedBox(height: AppConstants.defaultPadding),
+                const SizedBox(height: AppConstants.largePadding),
               ],
             ),
           ),
@@ -273,33 +434,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-class _StatItem extends StatelessWidget {
+class _PremiumStatItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
+  final Color color;
 
-  const _StatItem({
+  const _PremiumStatItem({
     required this.icon,
     required this.label,
     required this.value,
+    required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Icon(icon, color: AppConstants.primaryColor, size: 28),
-        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: color.withAlpha(25),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(icon, color: color, size: 26),
+        ),
+        const SizedBox(height: 12),
         Text(
           value,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.bold,
+          style: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
           ),
         ),
+        const SizedBox(height: 4),
         Text(
           label,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: AppConstants.textSecondary,
+          style: TextStyle(
+            fontSize: 12,
+            color: AppConstants.textMuted,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],

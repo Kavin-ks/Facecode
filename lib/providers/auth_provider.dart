@@ -23,7 +23,10 @@ class AuthProvider extends ChangeNotifier {
     _init();
   }
 
-  FirebaseAuth? get _firebaseAuth => _auth;
+  FirebaseAuth get _firebaseAuth {
+    _auth ??= FirebaseAuth.instance;
+    return _auth!;
+  }
 
   bool get _isFirebaseReady {
     try {
@@ -58,7 +61,7 @@ class AuthProvider extends ChangeNotifier {
       _auth ??= FirebaseAuth.instance;
 
       // Try to restore session from Firebase currentUser
-      final current = _firebaseAuth?.currentUser;
+      final current = _firebaseAuth.currentUser;
       if (current != null) {
         _user = UserProfile(
           uid: current.uid,
@@ -92,7 +95,7 @@ class AuthProvider extends ChangeNotifier {
         throw FirebaseAuthException(code: 'weak-password', message: 'Password too short. Use at least 6 characters.');
       }
 
-      final cred = await _firebaseAuth!.createUserWithEmailAndPassword(email: email, password: password);
+      final cred = await _firebaseAuth.createUserWithEmailAndPassword(email: email, password: password);
       await cred.user?.updateDisplayName(name);
       _user = UserProfile(uid: cred.user!.uid, email: email, name: name);
 
@@ -120,7 +123,7 @@ class AuthProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('AuthProvider.register unknown exception: $e');
-      _setError(GameError(type: GameErrorType.unknown, title: 'Registration Failed', message: e?.toString() ?? 'Could not create account. Please try again.', actionLabel: 'OK'));
+      _setError(GameError(type: GameErrorType.unknown, title: 'Registration Failed', message: e.toString(), actionLabel: 'OK'));
     } finally {
       _isBusy = false;
       notifyListeners();
@@ -133,7 +136,7 @@ class AuthProvider extends ChangeNotifier {
       _isBusy = true;
       notifyListeners();
 
-      final cred = await _firebaseAuth!.signInWithEmailAndPassword(email: email, password: password);
+      final cred = await _firebaseAuth.signInWithEmailAndPassword(email: email, password: password);
       _user = UserProfile(uid: cred.user!.uid, email: cred.user!.email ?? '', name: cred.user!.displayName ?? '');
 
       final prefs = await SharedPreferences.getInstance();
@@ -161,7 +164,7 @@ class AuthProvider extends ChangeNotifier {
       if (!_ensureFirebaseReady()) return;
       _isBusy = true;
       notifyListeners();
-      await _firebaseAuth!.signOut();
+      await _firebaseAuth.signOut();
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('remember_me');
       _user = null;

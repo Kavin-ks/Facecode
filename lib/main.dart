@@ -5,7 +5,15 @@ import 'package:firebase_core/firebase_core.dart';
 
 import 'package:facecode/providers/game_provider.dart';
 import 'package:facecode/providers/auth_provider.dart';
+import 'package:facecode/providers/progress_provider.dart';
+import 'package:facecode/providers/user_preferences_provider.dart';
 import 'package:facecode/screens/splash_screen.dart';
+import 'package:facecode/screens/game_hub_clean.dart';
+import 'package:facecode/screens/mode_selection_screen.dart';
+import 'package:facecode/screens/profile_screen.dart';
+import 'package:facecode/screens/games/truth_dare_screen.dart';
+import 'package:facecode/screens/games/would_rather_screen.dart';
+import 'package:facecode/screens/games/reaction_time_screen.dart';
 import 'package:facecode/utils/theme.dart';
 
 Future<void> main() async {
@@ -76,12 +84,24 @@ class _FaceCodeAppState extends State<FaceCodeApp> with WidgetsBindingObserver {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => GameProvider()),
+        ChangeNotifierProvider(
+          create: (_) => ProgressProvider()..initialize(),
+        ),
+        ChangeNotifierProvider(create: (_) => UserPreferencesProvider()),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         title: 'FaceCode',
         theme: AppTheme.darkTheme,
         home: const SplashScreen(),
+        routes: {
+          '/game-hub': (context) => const GameHubClean(),
+          '/profile': (context) => const ProfileScreen(),
+          '/mode-selection': (context) => const ModeSelectionScreen(),
+          '/truth-dare': (context) => const TruthDareScreen(),
+          '/would-rather': (context) => const WouldYouRatherScreen(),
+          '/reaction-time': (context) => const ReactionTimeScreen(),
+        },
       ),
     );
   }
