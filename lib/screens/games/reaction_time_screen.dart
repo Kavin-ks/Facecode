@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:confetti/confetti.dart';
 import 'package:provider/provider.dart';
 import 'package:facecode/providers/progress_provider.dart';
 import 'package:facecode/utils/constants.dart';
 import 'package:facecode/widgets/premium_ui.dart';
+import 'package:facecode/services/game_feedback_service.dart';
 
 /// Reaction Time mini-game
 class ReactionTimeScreen extends StatefulWidget {
@@ -48,7 +48,7 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
       _reactionTime = null;
     });
 
-    HapticFeedback.lightImpact();
+    GameFeedbackService.tap();
 
     // Random delay between 1-5 seconds
     final random = Random();
@@ -60,7 +60,7 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
           _state = GameState.tap;
           _showTime = DateTime.now();
         });
-        HapticFeedback.heavyImpact();
+        GameFeedbackService.success();
       }
     });
   }
@@ -72,7 +72,7 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
       setState(() {
         _state = GameState.tooEarly;
       });
-      HapticFeedback.heavyImpact();
+      GameFeedbackService.error();
       
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) {
@@ -102,19 +102,23 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
         _state = GameState.result;
       });
 
-      HapticFeedback.mediumImpact();
-      
-      // Award XP based on performance
-      final progress = context.read<ProgressProvider>();
+      GameFeedbackService.success();
+
+      // Award XP based on performance + track result
+      int xp = 10;
       if (diff < 200) {
-        progress.awardXP(50); // Amazing!
+        xp = 50; // Amazing!
       } else if (diff < 300) {
-        progress.awardXP(30); // Great!
+        xp = 30; // Great!
       } else if (diff < 400) {
-        progress.awardXP(20); // Good
-      } else {
-        progress.awardXP(10); // Try again
+        xp = 20; // Good
       }
+
+      context.read<ProgressProvider>().recordGameResult(
+        gameId: 'reaction_time',
+        won: diff < 300,
+        xpAward: xp,
+      );
     }
   }
 
@@ -123,7 +127,7 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
       _state = GameState.ready;
       _reactionTime = null;
     });
-    HapticFeedback.lightImpact();
+    GameFeedbackService.tap();
   }
 
   @override
@@ -134,6 +138,10 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
           title: const Text(
             'Reaction Time',
             style: TextStyle(

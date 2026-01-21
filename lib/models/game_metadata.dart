@@ -65,6 +65,7 @@ class GameMetadata {
   final bool isFeatured;
   final String bannerImage; // Emoji or URL
   final List<String> tags;
+  final int xpReward;
 
   const GameMetadata({
     required this.id,
@@ -80,5 +81,6 @@ class GameMetadata {
     this.isFeatured = false,
     this.bannerImage = '🎮',
     this.tags = const [],
+    this.xpReward = 20,
   });
 }

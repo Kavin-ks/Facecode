@@ -246,7 +246,7 @@ class _ResultScreenState extends State<ResultScreen> {
           
           ShaderMask(
             shaderCallback: (bounds) => const LinearGradient(
-              colors: AppConstants.neonGradient,
+              colors: AppConstants.primaryGradient,
             ).createShader(bounds),
             child: Text(
               answer,

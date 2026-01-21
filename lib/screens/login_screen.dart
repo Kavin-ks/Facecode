@@ -7,7 +7,7 @@ import 'package:facecode/models/game_error.dart';
 import 'package:facecode/utils/app_dialogs.dart';
 import 'package:facecode/utils/constants.dart';
 import 'package:facecode/routing/app_route.dart';
-import 'package:facecode/screens/game_hub_screen.dart';
+import 'package:facecode/screens/main_shell.dart';
 import 'package:facecode/screens/register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -40,8 +40,26 @@ class _LoginScreenState extends State<LoginScreen> {
     await auth.login(email, password);
     if (auth.isSignedIn) {
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(AppRoute.fadeSlide(const GameHubScreen()));
+      Navigator.of(context).pushReplacement(AppRoute.fadeSlide(const MainShell()));
       AppDialogs.showSnack(context, 'Welcome back!');
+    } else if (auth.authError != null) {
+      if (!mounted) return;
+      await AppDialogs.showGameError(context, auth.authError!);
+      auth.clearError();
+    } else {
+      // Fallback: ensure user gets feedback even if auth didn't set an error
+      if (!mounted) return;
+      await AppDialogs.showError(context, title: 'Login Failed', message: 'Could not log in. Please try again.', actionLabel: 'OK');
+    }
+  }
+
+  void _loginGuest() async {
+    final auth = context.read<AuthProvider>();
+    await auth.signInAnonymously();
+    if (auth.isSignedIn) {
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(AppRoute.fadeSlide(const MainShell()));
+      AppDialogs.showSnack(context, 'Signed in as Guest');
     } else if (auth.authError != null) {
       if (!mounted) return;
       await AppDialogs.showGameError(context, auth.authError!);
@@ -54,160 +72,159 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF0D0D12),
-              Color(0xFF1A1A2E),
-              Color(0xFF0D0D12),
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppConstants.largePadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 40),
-                
-                // Logo
-                Center(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppConstants.primaryColor.withAlpha(50),
-                          blurRadius: 40,
-                          spreadRadius: 5,
-                        ),
-                      ],
-                    ),
-                    child: const Text(
-                      '😎',
-                      style: TextStyle(fontSize: 70),
-                    ),
-                  ),
-                )
-                    .animate()
-                    .scale(curve: Curves.elasticOut, duration: 800.ms)
-                    .fadeIn(),
-                
-                const SizedBox(height: AppConstants.largePadding),
-                
-                // Title
-                Center(
-                  child: ShaderMask(
-                    shaderCallback: (bounds) => const LinearGradient(
-                      colors: AppConstants.neonGradient,
-                    ).createShader(bounds),
-                    child: const Text(
-                      'Welcome Back',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ),
-                ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2, end: 0),
-                
-                const SizedBox(height: 8),
-                
-                Center(
-                  child: Text(
-                    'Sign in to continue playing',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppConstants.textMuted,
-                    ),
-                  ),
-                ).animate().fadeIn(delay: 300.ms),
-                
-                const SizedBox(height: AppConstants.xlPadding),
-                
-                // Form Card
-                Container(
-                  padding: const EdgeInsets.all(AppConstants.largePadding),
+      backgroundColor: AppConstants.backgroundColor,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 40),
+              
+              // Logo
+              Center(
+                child: Container(
+                  width: 100,
+                  height: 100,
                   decoration: BoxDecoration(
-                    color: AppConstants.surfaceColor.withAlpha(150),
+                    color: AppConstants.surfaceColor,
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
-                      color: AppConstants.borderColor,
-                      width: 1,
+                      color: AppConstants.primaryColor.withAlpha(40),
+                      width: 2,
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Email field
-                      _buildPremiumTextField(
-                        controller: _emailController,
-                        label: 'Email',
-                        icon: Icons.email_outlined,
-                        keyboardType: TextInputType.emailAddress,
-                      ),
-                      
-                      const SizedBox(height: AppConstants.defaultPadding),
-                      
-                      // Password field
-                      _buildPremiumTextField(
-                        controller: _passwordController,
-                        label: 'Password',
-                        icon: Icons.lock_outline,
-                        isPassword: true,
-                      ),
-                      
-                      const SizedBox(height: AppConstants.xlPadding),
-                      
-                      // Login button
-                      _buildPremiumButton(
-                        onPressed: auth.isBusy ? null : _submit,
-                        isLoading: auth.isBusy,
-                        label: 'SIGN IN',
-                      ),
-                    ],
+                  child: const Center(
+                    child: Text(
+                      '😎',
+                      style: TextStyle(fontSize: 50),
+                    ),
                   ),
-                ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.1, end: 0),
-                
-                const SizedBox(height: AppConstants.largePadding),
-                
-                // Register link
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                ),
+              )
+                  .animate()
+                  .scale(curve: Curves.elasticOut, duration: 800.ms)
+                  .fadeIn(),
+              
+              const SizedBox(height: 24),
+              
+              // Title
+              const Center(
+                child: Text(
+                  'Welcome Back',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2, end: 0),
+              
+              const SizedBox(height: 8),
+              
+              Center(
+                child: Text(
+                  'Sign in to continue playing',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppConstants.textSecondary,
+                  ),
+                ),
+              ).animate().fadeIn(delay: 300.ms),
+              
+              const SizedBox(height: 40),
+              
+              // Form Card
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppConstants.surfaceColor,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: AppConstants.borderColor,
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      "Don't have an account? ",
-                      style: TextStyle(
-                        color: AppConstants.textMuted,
-                        fontSize: 14,
-                      ),
+                    // Email field
+                    _buildPremiumTextField(
+                      controller: _emailController,
+                      label: 'Email',
+                      icon: Icons.email_outlined,
+                      keyboardType: TextInputType.emailAddress,
                     ),
-                    GestureDetector(
-                      onTap: () => Navigator.of(context).push(AppRoute.fadeSlide(const RegisterScreen())),
-                      child: ShaderMask(
-                        shaderCallback: (bounds) => const LinearGradient(
-                          colors: AppConstants.neonGradient,
-                        ).createShader(bounds),
-                        child: const Text(
-                          'Create one',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                          ),
+                    
+                    const SizedBox(height: AppConstants.defaultPadding),
+                    
+                    // Password field
+                    _buildPremiumTextField(
+                      controller: _passwordController,
+                      label: 'Password',
+                      icon: Icons.lock_outline,
+                      isPassword: true,
+                    ),
+                    
+                    const SizedBox(height: AppConstants.xlPadding),
+                    
+                    // Login button
+                    _buildPremiumButton(
+                      onPressed: auth.isBusy ? null : _submit,
+                      isLoading: auth.isBusy,
+                      label: 'SIGN IN',
+                    ),
+                    
+                    const SizedBox(height: 16),
+                    
+                    // Guest Login
+                    TextButton(
+                      onPressed: auth.isBusy ? null : _loginGuest,
+                      child: Text(
+                        'Continue as Guest',
+                        style: TextStyle(
+                          color: AppConstants.textSecondary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
                         ),
                       ),
                     ),
                   ],
-                ).animate().fadeIn(delay: 500.ms),
-              ],
-            ),
+                ),
+              ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.1, end: 0),
+              
+              const SizedBox(height: AppConstants.largePadding),
+              
+              // Register link
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    "Don't have an account? ",
+                    style: TextStyle(
+                      color: AppConstants.textMuted,
+                      fontSize: 14,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).push(AppRoute.fadeSlide(const RegisterScreen())),
+                    child: ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: AppConstants.primaryGradient,
+                      ).createShader(bounds),
+                      child: const Text(
+                        'Create one',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ).animate().fadeIn(delay: 500.ms),
+            ],
           ),
         ),
       ),
@@ -266,7 +283,7 @@ class _LoginScreenState extends State<LoginScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: onPressed != null
-            ? const LinearGradient(colors: AppConstants.premiumGradient)
+            ? const LinearGradient(colors: AppConstants.primaryGradient)
             : null,
         color: onPressed == null ? AppConstants.surfaceColor : null,
         boxShadow: onPressed != null

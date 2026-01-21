@@ -4,7 +4,9 @@ import 'package:facecode/utils/game_catalog.dart';
 import 'package:facecode/widgets/clean_game_card.dart';
 import 'package:facecode/providers/user_preferences_provider.dart';
 import 'package:facecode/providers/progress_provider.dart';
+import 'package:facecode/providers/auth_provider.dart';
 import 'package:facecode/models/game_metadata.dart';
+import 'package:facecode/utils/color_ext.dart';
 
 class GameHubClean extends StatefulWidget {
   const GameHubClean({super.key});
@@ -15,7 +17,7 @@ class GameHubClean extends StatefulWidget {
 
 class _GameHubCleanState extends State<GameHubClean> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  String _greeting = "Hi Kavin 👋";
+  int _selectedIndex = 0;
 
   @override
   void initState() {
@@ -35,7 +37,6 @@ class _GameHubCleanState extends State<GameHubClean> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    final prefs = context.watch<UserPreferencesProvider>();
     final progress = context.watch<ProgressProvider>().progress;
 
     return Scaffold(
@@ -51,13 +52,34 @@ class _GameHubCleanState extends State<GameHubClean> with SingleTickerProviderSt
             onPressed: _openProfile,
             icon: CircleAvatar(
               radius: 18,
-              backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.12),
+              backgroundColor: Theme.of(context).colorScheme.primary.withOpacitySafe(0.12),
               child: const Text('K', style: TextStyle(color: Colors.white)),
             ),
             tooltip: 'Profile',
           ),
+          const SizedBox(width: 8),
         ],
         elevation: 0,
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        selectedItemColor: Theme.of(context).colorScheme.primary,
+        unselectedItemColor: Colors.white54,
+        backgroundColor: Colors.transparent,
+        showUnselectedLabels: true,
+        onTap: (index) {
+          setState(() => _selectedIndex = index);
+          if (index == 1) {
+            Navigator.pushNamed(context, '/leaderboard');
+          } else if (index == 2) {
+            _openProfile();
+          }
+        },
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.grid_on), label: 'Games'),
+          BottomNavigationBarItem(icon: Icon(Icons.emoji_events_outlined), label: 'Ranks'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        ],
       ),
       body: CustomScrollView(
         slivers: [
@@ -67,7 +89,7 @@ class _GameHubCleanState extends State<GameHubClean> with SingleTickerProviderSt
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_greeting, style: Theme.of(context).textTheme.headlineSmall),
+                  Text('Hi ${context.watch<AuthProvider>().user?.name ?? 'Kavin'} 👋', style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: 6),
                   Text('What do you want to play today?', style: Theme.of(context).textTheme.bodySmall),
                   const SizedBox(height: 16),
@@ -109,7 +131,7 @@ class _GameHubCleanState extends State<GameHubClean> with SingleTickerProviderSt
               controller: _tabController,
               children: [
                 _buildGameList(GameCatalog.allGames),
-                ...GameCategory.values.map((category) => _buildGameList(GameCatalog.getByCategory(category))).toList(),
+                ...GameCategory.values.map((category) => _buildGameList(GameCatalog.getByCategory(category))),
               ],
             ),
           ),

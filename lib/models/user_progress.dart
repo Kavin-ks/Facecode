@@ -10,6 +10,11 @@ class UserProgress {
   final DateTime? lastPlayedDate;
   final String? dailyChallengeGameId;
   final bool dailyChallengeCompleted;
+  final Map<String, int> gamePlays;
+  final Map<String, int> gameWins;
+  final Map<String, int> gameCurrentStreak;
+  final Map<String, int> gameBestStreak;
+  final List<String> badges;
 
   const UserProgress({
     this.level = 1,
@@ -22,6 +27,11 @@ class UserProgress {
     this.lastPlayedDate,
     this.dailyChallengeGameId,
     this.dailyChallengeCompleted = false,
+    this.gamePlays = const {},
+    this.gameWins = const {},
+    this.gameCurrentStreak = const {},
+    this.gameBestStreak = const {},
+    this.badges = const [],
   });
 
   /// Calculate XP needed for a given level
@@ -44,6 +54,11 @@ class UserProgress {
     DateTime? lastPlayedDate,
     String? dailyChallengeGameId,
     bool? dailyChallengeCompleted,
+    Map<String, int>? gamePlays,
+    Map<String, int>? gameWins,
+    Map<String, int>? gameCurrentStreak,
+    Map<String, int>? gameBestStreak,
+    List<String>? badges,
   }) {
     return UserProgress(
       level: level ?? this.level,
@@ -56,6 +71,11 @@ class UserProgress {
       lastPlayedDate: lastPlayedDate ?? this.lastPlayedDate,
       dailyChallengeGameId: dailyChallengeGameId ?? this.dailyChallengeGameId,
       dailyChallengeCompleted: dailyChallengeCompleted ?? this.dailyChallengeCompleted,
+      gamePlays: gamePlays ?? this.gamePlays,
+      gameWins: gameWins ?? this.gameWins,
+      gameCurrentStreak: gameCurrentStreak ?? this.gameCurrentStreak,
+      gameBestStreak: gameBestStreak ?? this.gameBestStreak,
+      badges: badges ?? this.badges,
     );
   }
 
@@ -72,6 +92,11 @@ class UserProgress {
       'lastPlayedDate': lastPlayedDate?.toIso8601String(),
       'dailyChallengeGameId': dailyChallengeGameId,
       'dailyChallengeCompleted': dailyChallengeCompleted,
+      'gamePlays': gamePlays,
+      'gameWins': gameWins,
+      'gameCurrentStreak': gameCurrentStreak,
+      'gameBestStreak': gameBestStreak,
+      'badges': badges,
     };
   }
 
@@ -90,6 +115,11 @@ class UserProgress {
           : null,
       dailyChallengeGameId: json['dailyChallengeGameId'],
       dailyChallengeCompleted: json['dailyChallengeCompleted'] ?? false,
+      gamePlays: (json['gamePlays'] as Map?)?.map((k, v) => MapEntry(k.toString(), (v as num).toInt())) ?? {},
+      gameWins: (json['gameWins'] as Map?)?.map((k, v) => MapEntry(k.toString(), (v as num).toInt())) ?? {},
+      gameCurrentStreak: (json['gameCurrentStreak'] as Map?)?.map((k, v) => MapEntry(k.toString(), (v as num).toInt())) ?? {},
+      gameBestStreak: (json['gameBestStreak'] as Map?)?.map((k, v) => MapEntry(k.toString(), (v as num).toInt())) ?? {},
+      badges: (json['badges'] as List?)?.map((e) => e.toString()).toList() ?? [],
     );
   }
 }

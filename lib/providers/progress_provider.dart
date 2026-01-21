@@ -90,6 +90,44 @@ class ProgressProvider extends ChangeNotifier {
     await _saveProgress();
   }
 
+  /// Record a specific game result with stats + badges
+  Future<void> recordGameResult({
+    required String gameId,
+    required bool won,
+    required int xpAward,
+  }) async {
+    final plays = Map<String, int>.from(_progress.gamePlays);
+    final wins = Map<String, int>.from(_progress.gameWins);
+    final currentStreaks = Map<String, int>.from(_progress.gameCurrentStreak);
+    final bestStreaks = Map<String, int>.from(_progress.gameBestStreak);
+
+    plays[gameId] = (plays[gameId] ?? 0) + 1;
+    if (won) {
+      wins[gameId] = (wins[gameId] ?? 0) + 1;
+      currentStreaks[gameId] = (currentStreaks[gameId] ?? 0) + 1;
+      final current = currentStreaks[gameId] ?? 0;
+      final best = bestStreaks[gameId] ?? 0;
+      if (current > best) bestStreaks[gameId] = current;
+    } else {
+      currentStreaks[gameId] = 0;
+    }
+
+    _progress = _progress.copyWith(
+      totalGamesPlayed: _progress.totalGamesPlayed + 1,
+      totalWins: won ? _progress.totalWins + 1 : _progress.totalWins,
+      lastPlayedDate: DateTime.now(),
+      gamePlays: plays,
+      gameWins: wins,
+      gameCurrentStreak: currentStreaks,
+      gameBestStreak: bestStreaks,
+    );
+
+    await awardXP(xpAward);
+    await _saveProgress();
+    await _checkAndAwardBadges();
+    notifyListeners();
+  }
+
   /// Update daily streak
   Future<void> _updateStreak() async {
     final now = DateTime.now();
@@ -174,6 +212,22 @@ class ProgressProvider extends ChangeNotifier {
       
       await _saveProgress();
       notifyListeners();
+    }
+  }
+
+  Future<void> _checkAndAwardBadges() async {
+    final earned = Set<String>.from(_progress.badges);
+
+    if (_progress.totalGamesPlayed >= 10) earned.add('rookie_10_games');
+    if (_progress.totalGamesPlayed >= 50) earned.add('veteran_50_games');
+    if (_progress.totalWins >= 1) earned.add('first_win');
+    if (_progress.totalWins >= 10) earned.add('ten_wins');
+    if (_progress.currentStreak >= 3) earned.add('streak_3');
+    if (_progress.currentStreak >= 10) earned.add('streak_10');
+
+    if (earned.length != _progress.badges.length) {
+      _progress = _progress.copyWith(badges: earned.toList());
+      await _saveProgress();
     }
   }
 

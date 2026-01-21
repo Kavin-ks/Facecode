@@ -7,7 +7,7 @@ import 'package:facecode/models/game_error.dart';
 import 'package:facecode/utils/app_dialogs.dart';
 import 'package:facecode/utils/constants.dart';
 import 'package:facecode/routing/app_route.dart';
-import 'package:facecode/screens/game_hub_screen.dart';
+import 'package:facecode/screens/main_shell.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -52,7 +52,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     await auth.register(name, email, pass);
     if (auth.isSignedIn) {
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(AppRoute.fadeSlide(const GameHubScreen()), (_) => false);
+      Navigator.of(context).pushAndRemoveUntil(AppRoute.fadeSlide(const MainShell()), (_) => false);
       AppDialogs.showSnack(context, 'Account created!');
     } else if (auth.authError != null) {
       if (!mounted) return;
@@ -111,7 +111,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Center(
                   child: ShaderMask(
                     shaderCallback: (bounds) => const LinearGradient(
-                      colors: AppConstants.neonGradient,
+                      colors: AppConstants.primaryGradient,
                     ).createShader(bounds),
                     child: const Text(
                       'Create Account',
@@ -215,7 +215,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       onTap: () => Navigator.of(context).pop(),
                       child: ShaderMask(
                         shaderCallback: (bounds) => const LinearGradient(
-                          colors: AppConstants.neonGradient,
+                          colors: AppConstants.primaryGradient,
                         ).createShader(bounds),
                         child: const Text(
                           'Sign in',
@@ -290,7 +290,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: onPressed != null
-            ? const LinearGradient(colors: AppConstants.premiumGradient)
+            ? const LinearGradient(colors: AppConstants.primaryGradient)
             : null,
         color: onPressed == null ? AppConstants.surfaceColor : null,
         boxShadow: onPressed != null

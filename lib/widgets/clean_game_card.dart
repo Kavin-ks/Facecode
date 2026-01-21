@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:facecode/models/game_metadata.dart';
+import 'package:facecode/utils/color_ext.dart';
 
 /// Minimal clean game card for production-like listing
 class CleanGameCard extends StatelessWidget {
@@ -38,7 +39,8 @@ class CleanGameCard extends StatelessWidget {
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: game.gradientColors.first.withOpacity(0.12),
+                  // Use single primary color with subtle opacity for flat look
+                  color: Theme.of(context).colorScheme.primary.withOpacitySafe(0.06),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
@@ -66,7 +68,7 @@ class CleanGameCard extends StatelessWidget {
                     Text(
                       game.description,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7),
+                            color: Theme.of(context).textTheme.bodySmall?.color?.withOpacitySafe(0.7),
                           ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -75,33 +77,50 @@ class CleanGameCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              // Player count & Play button
+              // Player count, XP chip & Play button
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.people, size: 16, color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.6)),
-                      const SizedBox(width: 4),
+                      Icon(Icons.people, size: 16, color: Theme.of(context).textTheme.bodySmall?.color?.withOpacitySafe(0.6)),
+                      const SizedBox(width: 6),
                       Text(
                         game.minPlayers == game.maxPlayers
                             ? '${game.minPlayers} '
                             : '${game.minPlayers}-${game.maxPlayers}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
                       ),
+                      const SizedBox(width: 8),
+                      // XP chip
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary.withOpacitySafe(0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.star, size: 14, color: Colors.amber),
+                            const SizedBox(width: 6),
+                            Text('${game.xpReward} XP', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12, fontWeight: FontWeight.w700)),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   SizedBox(
                     width: 72,
-                    child: OutlinedButton(
+                    child: ElevatedButton(
                       onPressed: onPlay,
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: Theme.of(context).colorScheme.primary.withOpacity(0.9)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         padding: const EdgeInsets.symmetric(vertical: 8),
+                        elevation: 1,
                       ),
-                      child: Text('Play', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+                      child: const Text('Play', style: TextStyle(color: Colors.white)),
                     ),
                   ),
                 ],

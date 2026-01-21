@@ -13,6 +13,7 @@ class AuthProvider extends ChangeNotifier {
   UserProfile? _user;
   bool _isBusy = false;
   GameError? _authError;
+  static const String _guestUidKey = 'guest_local_uid';
 
   UserProfile? get user => _user;
   bool get isBusy => _isBusy;
@@ -54,7 +55,13 @@ class AuthProvider extends ChangeNotifier {
     try {
       // Avoid using Firebase if it wasn't successfully initialized
       if (!_isFirebaseReady) {
-        debugPrint('AuthProvider: Firebase not initialized yet; skipping Firebase-dependent initialization.');
+        debugPrint('AuthProvider: Firebase not initialized yet; using local guest session if available.');
+        final prefs = await SharedPreferences.getInstance();
+        final guestUid = prefs.getString(_guestUidKey);
+        if (guestUid != null) {
+          _user = UserProfile(uid: guestUid, email: '', name: 'Guest Player');
+          notifyListeners();
+        }
         return;
       }
 
@@ -144,6 +151,7 @@ class AuthProvider extends ChangeNotifier {
 
       notifyListeners();
     } on FirebaseAuthException catch (e) {
+      debugPrint('AuthProvider.login FirebaseAuthException: ${e.code} - ${e.message}');
       if (e.code == 'user-not-found') {
         _setError(const GameError(type: GameErrorType.validation, title: 'User Not Found', message: 'No account found for that email.', actionLabel: 'OK'));
       } else if (e.code == 'wrong-password') {
@@ -151,7 +159,8 @@ class AuthProvider extends ChangeNotifier {
       } else {
         _setError(const GameError(type: GameErrorType.unknown, title: 'Login Failed', message: 'Could not log in. Please try again.', actionLabel: 'OK'));
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('AuthProvider.login unknown exception: $e');
       _setError(const GameError(type: GameErrorType.unknown, title: 'Login Failed', message: 'Could not log in. Please try again.', actionLabel: 'OK'));
     } finally {
       _isBusy = false;
@@ -159,14 +168,72 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ANONYMOUS AUTHENTICATION
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  Future<void> signInAnonymously() async {
+    try {
+      if (!_ensureFirebaseReady()) {
+        await _signInGuestOffline();
+        return;
+      }
+      _isBusy = true;
+      notifyListeners();
+
+      final cred = await _firebaseAuth.signInAnonymously();
+      _user = UserProfile(uid: cred.user!.uid, email: '', name: 'Guest Player');
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('remember_me', true);
+      await prefs.remove(_guestUidKey);
+
+      notifyListeners();
+    } on FirebaseAuthException catch (e) {
+      debugPrint('AuthProvider.signInAnonymously FirebaseAuthException: ${e.code} - ${e.message}');
+      if (e.code == 'operation-not-allowed' || e.code == 'admin-restricted-operation') {
+        await _signInGuestOffline();
+        return;
+      }
+      _setError(GameError(type: GameErrorType.unknown, title: 'Guest Login Failed', message: e.message ?? 'Could not sign in as guest.', actionLabel: 'OK'));
+    } catch (e) {
+      debugPrint('AuthProvider.signInAnonymously unknown exception: $e');
+      _setError(const GameError(type: GameErrorType.unknown, title: 'Guest Login Failed', message: 'Could not sign in as guest.', actionLabel: 'OK'));
+    } finally {
+      _isBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _signInGuestOffline() async {
+    _isBusy = true;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    final existing = prefs.getString(_guestUidKey);
+    final uid = existing ?? 'guest_local_${DateTime.now().millisecondsSinceEpoch}';
+    await prefs.setString(_guestUidKey, uid);
+    await prefs.setBool('remember_me', true);
+    _user = UserProfile(uid: uid, email: '', name: 'Guest Player');
+    _isBusy = false;
+    notifyListeners();
+  }
+
   Future<void> signOut() async {
     try {
-      if (!_ensureFirebaseReady()) return;
+      if (!_ensureFirebaseReady()) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('remember_me');
+        await prefs.remove(_guestUidKey);
+        _user = null;
+        notifyListeners();
+        return;
+      }
       _isBusy = true;
       notifyListeners();
       await _firebaseAuth.signOut();
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('remember_me');
+      await prefs.remove(_guestUidKey);
       _user = null;
       notifyListeners();
     } catch (_) {

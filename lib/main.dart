@@ -7,14 +7,25 @@ import 'package:facecode/providers/game_provider.dart';
 import 'package:facecode/providers/auth_provider.dart';
 import 'package:facecode/providers/progress_provider.dart';
 import 'package:facecode/providers/user_preferences_provider.dart';
+import 'package:facecode/providers/two_truths_provider.dart';
+import 'package:facecode/providers/truth_dare_provider.dart';
 import 'package:facecode/screens/splash_screen.dart';
-import 'package:facecode/screens/game_hub_clean.dart';
+import 'package:facecode/screens/main_shell.dart';
 import 'package:facecode/screens/mode_selection_screen.dart';
 import 'package:facecode/screens/profile_screen.dart';
+import 'package:facecode/screens/leaderboard_screen.dart';
+import 'package:facecode/screens/badges_screen.dart';
 import 'package:facecode/screens/games/truth_dare_screen.dart';
 import 'package:facecode/screens/games/would_rather_screen.dart';
 import 'package:facecode/screens/games/reaction_time_screen.dart';
+import 'package:facecode/screens/games/draw_guess_screen.dart';
+import 'package:facecode/screens/games/memory_cards_screen.dart';
+import 'package:facecode/screens/games/simon_says_screen.dart';
+import 'package:facecode/screens/games/tic_tac_toe_screen.dart';
+import 'package:facecode/screens/games/fastest_finger_screen.dart';
+import 'package:facecode/screens/games/two_truths_screen.dart';
 import 'package:facecode/utils/theme.dart';
+import 'package:facecode/utils/constants.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -84,6 +95,8 @@ class _FaceCodeAppState extends State<FaceCodeApp> with WidgetsBindingObserver {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => GameProvider()),
+        ChangeNotifierProvider(create: (_) => TwoTruthsProvider()),
+        ChangeNotifierProvider(create: (_) => TruthDareProvider()),
         ChangeNotifierProvider(
           create: (_) => ProgressProvider()..initialize(),
         ),
@@ -91,17 +104,54 @@ class _FaceCodeAppState extends State<FaceCodeApp> with WidgetsBindingObserver {
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
+        builder: (context, widget) {
+          // Custom error widget
+          ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
+             return Scaffold(
+               backgroundColor: AppConstants.backgroundColor,
+               body: Center(
+                 child: Padding(
+                   padding: const EdgeInsets.all(20),
+                   child: Column(
+                     mainAxisSize: MainAxisSize.min,
+                     children: [
+                        Icon(Icons.error_outline, color: AppConstants.errorColor, size: 48),
+                        const SizedBox(height: 16),
+                        const Text("Something went wrong", style: TextStyle(color: Colors.white, fontSize: 18)),
+                        const SizedBox(height: 8),
+                         Text(errorDetails.exceptionAsString(), 
+                          style: TextStyle(color: AppConstants.textSecondary, fontSize: 12),
+                          textAlign: TextAlign.center,
+                          maxLines: 3,
+                        ),
+                     ],
+                   ),
+                 ),
+               ),
+             );
+          };
+          return widget!;
+        },
         title: 'FaceCode',
         theme: AppTheme.darkTheme,
         home: const SplashScreen(),
         routes: {
-          '/game-hub': (context) => const GameHubClean(),
+          '/game-hub': (context) => const MainShell(),
           '/profile': (context) => const ProfileScreen(),
+          '/leaderboard': (context) => const LeaderboardScreen(),
+          '/badges': (context) => const BadgesScreen(),
           '/mode-selection': (context) => const ModeSelectionScreen(),
           '/truth-dare': (context) => const TruthDareScreen(),
           '/would-rather': (context) => const WouldYouRatherScreen(),
           '/reaction-time': (context) => const ReactionTimeScreen(),
+          '/draw-guess': (context) => const DrawGuessScreen(),
+          '/memory-cards': (context) => const MemoryCardsScreen(),
+          '/simon-says': (context) => const SimonSaysScreen(),
+          '/tic-tac-toe': (context) => const TicTacToeScreen(),
+          '/fastest-finger': (context) => const FastestFingerScreen(),
+          '/two-truths': (context) => const TwoTruthsScreen(),
         },
+
       ),
     );
   }

@@ -115,7 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                   icon: Icons.add_circle_outline,
                   label: 'CREATE ROOM',
-                  gradient: AppConstants.premiumGradient,
+                  gradient: AppConstants.primaryGradient,
                   isPrimary: true,
                 ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.2, end: 0),
 
@@ -129,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                   icon: Icons.login_rounded,
                   label: 'JOIN ROOM',
-                  gradient: AppConstants.neonGradient,
+                  gradient: AppConstants.primaryGradient,
                   isPrimary: false,
                 ).animate().fadeIn(delay: 500.ms).slideY(begin: 0.2, end: 0),
                 

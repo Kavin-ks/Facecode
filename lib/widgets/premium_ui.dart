@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:facecode/utils/constants.dart';
@@ -24,6 +25,152 @@ class GradientBackground extends StatelessWidget {
         ),
       ),
       child: child,
+    );
+  }
+}
+
+/// Glassmorphism card with blur + subtle gradient
+class GlassCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsets? padding;
+  final double radius;
+  final List<Color>? gradientColors;
+  final VoidCallback? onTap;
+
+  const GlassCard({
+    super.key,
+    required this.child,
+    this.padding,
+    this.radius = 20,
+    this.gradientColors,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = gradientColors ?? [
+      Colors.white.withAlpha(12),
+      Colors.white.withAlpha(4),
+    ];
+
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: colors,
+              ),
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(color: Colors.white.withAlpha(30)),
+            ),
+            child: Padding(
+              padding: padding ?? const EdgeInsets.all(AppConstants.defaultPadding),
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Simple shimmer effect for skeleton loaders
+class Shimmer extends StatefulWidget {
+  final Widget child;
+  const Shimmer({super.key, required this.child});
+
+  @override
+  State<Shimmer> createState() => _ShimmerState();
+}
+
+class _ShimmerState extends State<Shimmer> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
+      ..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return ShaderMask(
+          shaderCallback: (rect) {
+            final gradient = LinearGradient(
+              begin: Alignment(-1.0 + _controller.value * 2, -0.3),
+              end: Alignment(1.0 + _controller.value * 2, 0.3),
+              colors: [
+                Colors.white.withAlpha(20),
+                Colors.white.withAlpha(60),
+                Colors.white.withAlpha(20),
+              ],
+              stops: const [0.1, 0.5, 0.9],
+            );
+            return gradient.createShader(rect);
+          },
+          blendMode: BlendMode.srcATop,
+          child: child,
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
+class SkeletonBox extends StatelessWidget {
+  final double height;
+  final double width;
+  final BorderRadius borderRadius;
+
+  const SkeletonBox({
+    super.key,
+    required this.height,
+    required this.width,
+    this.borderRadius = const BorderRadius.all(Radius.circular(12)),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Shimmer(
+      child: Container(
+        height: height,
+        width: width,
+        decoration: BoxDecoration(
+          color: Colors.white.withAlpha(15),
+          borderRadius: borderRadius,
+        ),
+      ),
+    );
+  }
+}
+
+class SkeletonLine extends StatelessWidget {
+  final double height;
+  final double width;
+  const SkeletonLine({super.key, this.height = 12, this.width = double.infinity});
+
+  @override
+  Widget build(BuildContext context) {
+    return SkeletonBox(
+      height: height,
+      width: width,
+      borderRadius: BorderRadius.circular(8),
     );
   }
 }

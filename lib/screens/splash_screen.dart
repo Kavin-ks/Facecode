@@ -5,11 +5,11 @@ import 'package:provider/provider.dart';
 
 import 'package:facecode/providers/auth_provider.dart';
 import 'package:facecode/utils/constants.dart';
-import 'package:facecode/screens/game_hub_screen.dart';
+import 'package:facecode/screens/main_shell.dart';
 import 'package:facecode/screens/login_screen.dart';
 import 'package:facecode/routing/app_route.dart';
 
-/// Premium splash screen with FaceCode branding
+/// Modern splash screen with FaceCode branding
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -49,7 +49,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     if (!mounted) return;
     try {
       final auth = context.read<AuthProvider>();
-      final destination = auth.isSignedIn ? const GameHubScreen() : const LoginScreen();
+      final destination = auth.isSignedIn ? const MainShell() : const LoginScreen();
       Navigator.of(context).pushReplacement(
         AppRoute.fadeSlide(destination),
       );
@@ -71,24 +71,17 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppConstants.backgroundColor,
       body: GestureDetector(
         onTap: _navigateNow,
         behavior: HitTestBehavior.opaque,
         child: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF0D0D12),
-                Color(0xFF1A1A2E),
-                Color(0xFF0D0D12),
-              ],
-            ),
+          decoration: BoxDecoration(
+            color: AppConstants.backgroundColor,
           ),
           child: Stack(
             children: [
-              // Animated background glow
+              // Subtle background glow
               Positioned.fill(
                 child: AnimatedBuilder(
                   animation: _pulseController,
@@ -142,7 +135,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                       // App Name with gradient
                       ShaderMask(
                         shaderCallback: (bounds) => const LinearGradient(
-                          colors: AppConstants.neonGradient,
+                          colors: AppConstants.primaryGradient,
                         ).createShader(bounds),
                         child: const Text(
                           'FaceCode',

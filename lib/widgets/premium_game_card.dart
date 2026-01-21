@@ -33,14 +33,17 @@ class _PremiumGameCardState extends State<PremiumGameCard> {
   bool _isHovered = false;
 
   void _handleTapDown(TapDownDetails details) {
+    if (!mounted) return;
     setState(() => _isPressed = true);
   }
 
   void _handleTapUp(TapUpDetails details) {
+    if (!mounted) return;
     setState(() => _isPressed = false);
   }
 
   void _handleTapCancel() {
+    if (!mounted) return;
     setState(() => _isPressed = false);
   }
 
@@ -60,8 +63,8 @@ class _PremiumGameCardState extends State<PremiumGameCard> {
     }
 
     return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
+      onEnter: (_) { if (!mounted) return; setState(() => _isHovered = true); },
+      onExit: (_) { if (!mounted) return; setState(() => _isHovered = false); },
       child: AnimatedScale(
         scale: _isPressed ? 0.97 : (_isHovered ? 1.03 : 1.0),
         duration: const Duration(milliseconds: 180),
@@ -72,9 +75,9 @@ class _PremiumGameCardState extends State<PremiumGameCard> {
             splashColor: widget.game.gradientColors.first.withOpacitySafe(0.2),
             highlightColor: Colors.white.withOpacitySafe(0.04),
             onTap: widget.onTap,
-            onTapDown: (_) => _handleTapDown(TapDownDetails(kind: PointerDeviceKind.touch)) ,
+            onTapDown: _handleTapDown,
             onTapCancel: _handleTapCancel,
-            onTapUp: (_) => _handleTapUp(TapUpDetails(kind: PointerDeviceKind.touch)),
+            onTapUp: _handleTapUp,
             child: Container(
               width: width,
               height: height,

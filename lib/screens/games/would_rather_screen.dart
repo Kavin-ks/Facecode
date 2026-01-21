@@ -1,21 +1,13 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:confetti/confetti.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
-import 'package:facecode/providers/progress_provider.dart';
 import 'package:facecode/utils/constants.dart';
 import 'package:facecode/widgets/premium_ui.dart';
+import 'package:facecode/models/wyr_question.dart';
+import 'package:facecode/services/wyr_service.dart';
+import 'package:facecode/providers/progress_provider.dart';
+import 'package:facecode/services/game_feedback_service.dart';
 
-/// Question model for Would You Rather
-class WouldYouRatherQuestion {
-  final String optionA;
-  final String optionB;
-  
-  const WouldYouRatherQuestion(this.optionA, this.optionB);
-}
-
-/// Would You Rather mini-game
 class WouldYouRatherScreen extends StatefulWidget {
   const WouldYouRatherScreen({super.key});
 
@@ -24,356 +16,372 @@ class WouldYouRatherScreen extends StatefulWidget {
 }
 
 class _WouldYouRatherScreenState extends State<WouldYouRatherScreen> {
-  late ConfettiController _confettiController;
+  final WyrService _service = WyrService();
   
-  int _currentQuestionIndex = 0;
-  String? _selectedOption;
-  int _votesA = 0;
-  int _votesB = 0;
-  int _totalAnswered = 0;
-
-  static final List<WouldYouRatherQuestion> _questions = [
-    const WouldYouRatherQuestion(
-      'Have the ability to fly',
-      'Have the ability to become invisible',
-    ),
-    const WouldYouRatherQuestion(
-      'Travel back to the past',
-      'Travel forward to the future',
-    ),
-    const WouldYouRatherQuestion(
-      'Be able to speak all languages',
-      'Be able to talk to animals',
-    ),
-    const WouldYouRatherQuestion(
-      'Live without music',
-      'Live without movies',
-    ),
-    const WouldYouRatherQuestion(
-      'Always be 10 minutes late',
-      'Always be 20 minutes early',
-    ),
-    const WouldYouRatherQuestion(
-      'Have unlimited money',
-      'Have unlimited time',
-    ),
-    const WouldYouRatherQuestion(
-      'Never use social media again',
-      'Never watch TV/movies again',
-    ),
-    const WouldYouRatherQuestion(
-      'Live in a treehouse',
-      'Live on a boat',
-    ),
-    const WouldYouRatherQuestion(
-      'Be famous when you are alive',
-      'Be famous after you die',
-    ),
-    const WouldYouRatherQuestion(
-      'Have a rewind button',
-      'Have a pause button',
-    ),
-    const WouldYouRatherQuestion(
-      'Always have to say everything on your mind',
-      'Never speak again',
-    ),
-    const WouldYouRatherQuestion(
-      'Live forever',
-      'Die tomorrow',
-    ),
-    const WouldYouRatherQuestion(
-      'Eat pizza for every meal',
-      'Eat tacos for every meal',
-    ),
-    const WouldYouRatherQuestion(
-      'Have a personal chef',
-      'Have a personal driver',
-    ),
-    const WouldYouRatherQuestion(
-      'Win the lottery',
-      'Find your true love',
-    ),
-  ];
+  WyrQuestion? _currentQuestion;
+  bool _isLoading = true;
+  bool _hasVoted = false;
+  String? _selectedOptionId; // 'A' or 'B'
+  String? _aiChoice; // 'A' or 'B'
+  
+  // Stats for animation
+  double _percentA = 0.5;
+  double _percentB = 0.5;
 
   @override
   void initState() {
     super.initState();
-    _confettiController = ConfettiController(duration: const Duration(seconds: 2));
-    _shuffleQuestions();
+    _loadNextQuestion();
   }
 
-  @override
-  void dispose() {
-    _confettiController.dispose();
-    super.dispose();
-  }
-
-  void _shuffleQuestions() {
-    final random = Random();
-    final index = random.nextInt(_questions.length);
+  Future<void> _loadNextQuestion() async {
     setState(() {
-      _currentQuestionIndex = index;
-      _selectedOption = null;
-      _votesA = 0;
-      _votesB = 0;
-    });
-  }
-
-  void _selectOption(String option) {
-    if (_selectedOption != null) return;
-
-    setState(() {
-      _selectedOption = option;
-      _totalAnswered++;
-      
-      // Simulate votes (in real multiplayer, this would come from other players)
-      final random = Random();
-      if (option == 'A') {
-        _votesA = 1;
-        _votesB = random.nextInt(2);
-      } else {
-        _votesB = 1;
-        _votesA = random.nextInt(2);
-      }
+      _isLoading = true;
+      _hasVoted = false;
+      _selectedOptionId = null;
+      _aiChoice = null;
     });
 
-    _confettiController.play();
-    HapticFeedback.mediumImpact();
+    final q = await _service.getRandomQuestion();
     
-    // Award XP
-    final progress = context.read<ProgressProvider>();
-    progress.awardXP(20);
+    if (mounted) {
+      if (q != null) {
+        setState(() {
+          _currentQuestion = q;
+          _isLoading = false;
+          // Pre-calc percentages for initial state (hidden)
+          _percentA = q.percentA / 100;
+          _percentB = q.percentB / 100;
+        });
+      } else {
+        // Retry or error
+         setState(() => _isLoading = false);
+      }
+    }
   }
 
-  void _nextQuestion() {
-    _shuffleQuestions();
-    HapticFeedback.lightImpact();
+  Future<void> _handleVote(bool isOptionA) async {
+    if (_hasVoted || _currentQuestion == null) return;
+
+    setState(() {
+      _hasVoted = true;
+      _selectedOptionId = isOptionA ? 'A' : 'B';
+    });
+
+    GameFeedbackService.tap();
+
+    try {
+      final updatedQ = await _service.vote(_currentQuestion!.id, isOptionA);
+      if (mounted && updatedQ != null) {
+        setState(() {
+          _currentQuestion = updatedQ;
+          _percentA = updatedQ.percentA / 100;
+          _percentB = updatedQ.percentB / 100;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final updated = _service.voteLocal(_currentQuestion!, isOptionA);
+      setState(() {
+        _currentQuestion = updated;
+        _percentA = updated.percentA / 100;
+        _percentB = updated.percentB / 100;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Offline mode: vote saved locally.")),
+      );
+    }
+
+    _setAiChoice();
+
+    if (mounted) {
+      context.read<ProgressProvider>().recordGameResult(
+        gameId: 'would_rather',
+        won: false,
+        xpAward: 10,
+      );
+    }
+  }
+
+  void _setAiChoice() {
+    if (_currentQuestion == null) return;
+    final aWeight = _currentQuestion!.percentA / 100;
+    _aiChoice = (aWeight >= 0.5) ? 'A' : 'B';
   }
 
   @override
   Widget build(BuildContext context) {
-    final question = _questions[_currentQuestionIndex];
-    final totalVotes = _votesA + _votesB;
-    final percentA = totalVotes > 0 ? (_votesA / totalVotes * 100).round() : 0;
-    final percentB = totalVotes > 0 ? (_votesB / totalVotes * 100).round() : 0;
-
-    return GradientBackground(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          title: const Text(
-            'Would You Rather',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppConstants.textPrimary,
-            ),
-          ),
-          centerTitle: true,
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: Center(
-                child: Text(
-                  'Answered: $_totalAnswered',
-                  style: TextStyle(
-                    color: AppConstants.textSecondary,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-        body: Stack(
+    return Scaffold(
+      backgroundColor: AppConstants.backgroundColor,
+      body: SafeArea(
+        child: Column(
           children: [
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(AppConstants.defaultPadding),
-                child: Column(
-                  children: [
-                    // Title Card
-                    NeonCard(
-                      padding: const EdgeInsets.all(20),
-                      child: const Text(
-                        'Would You Rather...',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: AppConstants.textPrimary,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  BackButton(color: Colors.white, onPressed: () => Navigator.pop(context)),
+                  const Text(
+                    "WOULD YOU RATHER",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                      fontSize: 14,
                     ),
-
-                    const SizedBox(height: 32),
-
-                    // Options
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _buildOptionCard(
-                            'A',
-                            question.optionA,
-                            percentA,
-                            const [Color(0xFF00E5FF), Color(0xFF536DFE)],
-                          ),
-                          
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            child: Text(
-                              'OR',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: AppConstants.textMuted,
-                                letterSpacing: 2,
-                              ),
-                            ),
-                          ),
-                          
-                          _buildOptionCard(
-                            'B',
-                            question.optionB,
-                            percentB,
-                            const [Color(0xFFFF4081), Color(0xFFFF6E40)],
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Next Button
-                    if (_selectedOption != null) ...[
-                      const SizedBox(height: 24),
-                      GradientButton(
-                        text: 'Next Question',
-                        icon: Icons.arrow_forward,
-                        onPressed: _nextQuestion,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            
-            // Confetti
-            Align(
-              alignment: Alignment.topCenter,
-              child: ConfettiWidget(
-                confettiController: _confettiController,
-                blastDirectionality: BlastDirectionality.explosive,
-                particleDrag: 0.05,
-                emissionFrequency: 0.05,
-                numberOfParticles: 40,
-                gravity: 0.05,
-                shouldLoop: false,
-                colors: const [
-                  AppConstants.primaryColor,
-                  AppConstants.secondaryColor,
-                  AppConstants.accentNeon,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.share, color: Colors.white),
+                    onPressed: () {},
+                  ),
                 ],
               ),
             ),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _currentQuestion == null
+                      ? _buildErrorView()
+                      : _buildGameView(),
+            ),
+            Container(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_hasVoted)
+                    ElevatedButton.icon(
+                      onPressed: _loadNextQuestion,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text("NEXT QUESTION"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppConstants.backgroundColor,
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      ),
+                    ).animate().fadeIn().scale(),
+                  if (!_hasVoted)
+                    TextButton(
+                      onPressed: _loadNextQuestion,
+                      child: const Text("SKIP QUESTION", style: TextStyle(color: Colors.white54)),
+                    )
+                ],
+              ),
+            )
           ],
         ),
       ),
     );
   }
 
-  Widget _buildOptionCard(String letter, String text, int percent, List<Color> colors) {
-    final isSelected = _selectedOption == letter;
-    final showResults = _selectedOption != null;
+  Widget _buildErrorView() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, size: 48, color: Colors.redAccent),
+          const SizedBox(height: 16),
+          const Text("Could not load questions.", style: TextStyle(color: Colors.white)),
+          TextButton(onPressed: _loadNextQuestion, child: const Text("Retry"))
+        ],
+      ),
+    );
+  }
 
-    return GestureDetector(
-      onTap: _selectedOption == null ? () => _selectOption(letter) : null,
-      child: AnimatedContainer(
-        duration: AppConstants.animationFast,
-        child: NeonCard(
-          gradientColors: colors,
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            child: Column(
+  Widget _buildGameView() {
+    final totalVotes = _currentQuestion?.totalVotes ?? 0;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        children: [
+          GlassCard(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: colors),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white,
-                          width: 2,
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          letter,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Text(
-                        text,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                          height: 1.3,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                
-                if (showResults) ...[
-                  const SizedBox(height: 16),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: LinearProgressIndicator(
-                      value: percent / 100,
-                      backgroundColor: Colors.white.withAlpha(50),
-                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                      minHeight: 8,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        isSelected ? 'Your choice ✓' : '',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      Text(
-                        '$percent%',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                _buildStat('Votes', totalVotes.toString()),
+                _buildStat('You', _hasVoted ? 'Voted' : 'Pending'),
+                _buildStat('AI', _aiChoice == null ? '--' : 'Chose $_aiChoice'),
               ],
             ),
           ),
-        ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: _buildOptionCard(
+              text: _currentQuestion!.optionA,
+              isOptionA: true,
+              percent: _percentA,
+              color: const Color(0xFFE94057),
+            ),
+          ),
+          Container(
+            width: 50,
+            height: 50,
+            margin: const EdgeInsets.symmetric(vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                )
+              ],
+            ),
+            child: const Center(
+              child: Text(
+                "OR",
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: AppConstants.backgroundColor),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _buildOptionCard(
+              text: _currentQuestion!.optionB,
+              isOptionA: false,
+              percent: _percentB,
+              color: const Color(0xFF4285F4),
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildOptionCard({
+    required String text,
+    required bool isOptionA,
+    required double percent,
+    required Color color,
+  }) {
+    final isSelected = _selectedOptionId == (isOptionA ? 'A' : 'B');
+    final isOtherSelected = _hasVoted && !isSelected;
+    
+    return GestureDetector(
+      onTap: _hasVoted ? null : () => _handleVote(isOptionA),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: isSelected ? color : (isOtherSelected ? color.withValues(alpha: 0.25) : color),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: _hasVoted
+              ? []
+              : [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.4),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  )
+                ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Stack(
+            children: [
+              if (_hasVoted)
+                AnimatedOpacity(
+                  duration: const Duration(milliseconds: 400),
+                  opacity: isSelected ? 0.0 : 0.25,
+                  child: Container(
+                    width: double.infinity,
+                    height: double.infinity,
+                    color: Colors.black,
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      text,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white.withValues(alpha: isOtherSelected ? 0.6 : 1.0),
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (_hasVoted) ...[
+                      _buildPercentBar(percent, color, isSelected),
+                      const SizedBox(height: 10),
+                      Text(
+                        "${(percent * 100).toInt()}%",
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                      ).animate().fadeIn().scale(),
+                      const Text(
+                        "of people chose this",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ] else
+                      const Text('Tap to vote', style: TextStyle(color: Colors.white70)),
+                    if (isSelected)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 10),
+                        child: Icon(Icons.check_circle, color: Colors.white, size: 32),
+                      ).animate().fadeIn(),
+                  ],
+                ),
+              ),
+              if (!_hasVoted)
+                Positioned.fill(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _handleVote(isOptionA),
+                      splashColor: Colors.white24,
+                    ),
+                  ),
+                )
+            ],
+          ),
+        ),
+      ).animate(target: _hasVoted ? 1 : 0).scale(begin: const Offset(1, 1), end: const Offset(0.98, 0.98)),
+    );
+  }
+
+  Widget _buildPercentBar(double value, Color color, bool isSelected) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        return Container(
+          height: 10,
+          decoration: BoxDecoration(
+            color: Colors.white24,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 500),
+            width: width * value,
+            decoration: BoxDecoration(
+              color: isSelected ? Colors.white : Colors.white70,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStat(String label, String value) {
+    return Column(
+      children: [
+        Text(label.toUpperCase(), style: const TextStyle(color: AppConstants.textSecondary, fontSize: 10)),
+        const SizedBox(height: 4),
+        Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ],
     );
   }
 }

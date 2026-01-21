@@ -405,7 +405,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
               height: 48,
               decoration: BoxDecoration(
                 gradient: isActive
-                    ? const LinearGradient(colors: AppConstants.premiumGradient)
+                    ? const LinearGradient(colors: AppConstants.primaryGradient)
                     : null,
                 color: isActive ? null : AppConstants.surfaceColor,
                 borderRadius: BorderRadius.circular(14),
@@ -475,13 +475,13 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppConstants.neonPink.withAlpha(30),
+                      color: AppConstants.primaryColor.withAlpha(30),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       '😎 Emoji',
                       style: TextStyle(
-                        color: AppConstants.neonPink,
+                        color: AppConstants.primaryColor,
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),
@@ -519,7 +519,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
         children: [
           Row(
             children: [
-              Icon(Icons.person_add, color: AppConstants.neonBlue, size: 18),
+              Icon(Icons.person_add, color: AppConstants.primaryColor, size: 18),
               const SizedBox(width: 8),
               const Text(
                 'Add Another Player',
@@ -567,7 +567,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
-                        color: AppConstants.neonBlue.withAlpha(60),
+                        color: AppConstants.primaryColor.withAlpha(60),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
@@ -590,14 +590,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
         height: 60,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
-          gradient: const LinearGradient(colors: AppConstants.premiumGradient),
-          boxShadow: [
-            BoxShadow(
-              color: AppConstants.primaryColor.withAlpha(100),
-              blurRadius: 25,
-              offset: const Offset(0, 8),
-            ),
-          ],
+          color: Theme.of(context).colorScheme.primary,
+          boxShadow: AppConstants.cardShadow,
         ),
         child: const Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -616,12 +610,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
           ],
         ),
       ),
-    )
-        .animate()
-        .fadeIn(delay: 400.ms)
-        .scale(begin: const Offset(0.9, 0.9))
-        .then()
-        .shimmer(duration: 2000.ms, color: Colors.white24);
+    ).animate().fadeIn(delay: 400.ms).scale(begin: const Offset(0.98, 0.98));
   }
 
   Widget _buildWaitingCard() {
