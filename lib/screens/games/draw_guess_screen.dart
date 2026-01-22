@@ -1,12 +1,15 @@
-import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:facecode/utils/constants.dart';
 import 'package:facecode/screens/games/common/game_base_screen.dart';
 import 'package:facecode/screens/games/common/game_result_screen.dart';
 import 'package:facecode/utils/game_catalog.dart';
-import 'package:facecode/services/game_feedback_service.dart';
 import 'package:facecode/widgets/premium_ui.dart';
+import 'package:facecode/providers/game_provider.dart';
+import 'package:facecode/screens/wifi_create_room_screen.dart';
+import 'package:facecode/screens/wifi_join_room_screen.dart';
+import 'package:facecode/routing/app_route.dart';
+import 'package:facecode/controllers/draw_guess_controller.dart';
 
 class DrawGuessScreen extends StatefulWidget {
   const DrawGuessScreen({super.key});
@@ -15,167 +18,54 @@ class DrawGuessScreen extends StatefulWidget {
   State<DrawGuessScreen> createState() => _DrawGuessScreenState();
 }
 
-enum _DrawStage { intro, playing, roundEnd, finished }
-
-class _Stroke {
-  final List<Offset?> points;
-  final Color color;
-  final double width;
-  final bool isEraser;
-
-  _Stroke({
-    required this.points,
-    required this.color,
-    required this.width,
-    required this.isEraser,
-  });
-}
-
-class _GuessMessage {
-  final String name;
-  final String text;
-  final bool isCorrect;
-  final bool isSystem;
-
-  const _GuessMessage({
-    required this.name,
-    required this.text,
-    this.isCorrect = false,
-    this.isSystem = false,
-  });
-}
-
 class _DrawGuessScreenState extends State<DrawGuessScreen> {
-  final Random _rng = Random();
   final TextEditingController _guessController = TextEditingController();
+  final TextEditingController _playerController = TextEditingController();
   final ScrollController _chatController = ScrollController();
+  late final DrawGuessController _controller;
+  bool _didNavigate = false;
 
-  final List<Color> _palette = [
-    Colors.black,
-    const Color(0xFFEF5350),
-    const Color(0xFF42A5F5),
-    const Color(0xFF66BB6A),
-    const Color(0xFFFFCA28),
-    const Color(0xFFAB47BC),
-    const Color(0xFF8D6E63),
-    const Color(0xFF00ACC1),
-  ];
-  final List<double> _brushSizes = [4, 8, 12];
-
-  Color _selectedColor = Colors.black;
-  double _selectedBrush = 6;
-  bool _isEraser = false;
-
-  List<_Stroke> _strokes = [];
-  _Stroke? _currentStroke;
-
-  _DrawStage _stage = _DrawStage.intro;
-  final int _totalRounds = 3;
-  int _roundIndex = 0;
-  int _score = 0;
-  int _timeLeft = 0;
-  Timer? _timer;
-  Timer? _aiTimer;
-  int _hintsUsed = 0;
-  int _correctRounds = 0;
-  bool _hasPlayers = false;
-
-  final List<String> _aiNames = ['Nova', 'Pixel', 'Echo', 'Blitz', 'Luna'];
-  final List<_GuessMessage> _messages = [];
-
-  final List<String> _words = [
-    'apple', 'bicycle', 'castle', 'rocket', 'tiger', 'pizza', 'guitar', 'rainbow', 'camera', 'dragon',
-    'volcano', 'island', 'umbrella', 'chocolate', 'sunflower', 'elephant', 'snowman', 'airplane', 'cactus', 'piano',
-    'lantern', 'butterfly', 'lighthouse', 'mountain', 'suitcase', 'spaceship', 'popcorn', 'football', 'telescope', 'dolphin',
-  ];
-  String _wordToDraw = '';
-  Set<int> _revealedIndices = {};
+  @override
+  void initState() {
+    super.initState();
+    _controller = DrawGuessController();
+    _controller.addListener(_scrollChatToBottom);
+    _controller.addListener(_handleFinish);
+  }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _aiTimer?.cancel();
+    _controller.disposeTimers();
+    _controller.removeListener(_scrollChatToBottom);
+    _controller.removeListener(_handleFinish);
+    _controller.dispose();
     _guessController.dispose();
+    _playerController.dispose();
     _chatController.dispose();
     super.dispose();
   }
 
-  void _startGame() {
-    GameFeedbackService.tap();
-    _score = 0;
-    _roundIndex = 0;
-    _correctRounds = 0;
-    _messages.clear();
-    _nextRound();
-  }
-
-  void _nextRound() {
-    _timer?.cancel();
-    _aiTimer?.cancel();
-    _strokes = [];
-    _currentStroke = null;
-    _hintsUsed = 0;
-    _revealedIndices = {};
-    _wordToDraw = _words[_rng.nextInt(_words.length)].toUpperCase();
-    _timeLeft = 90;
-    _roundIndex++;
-    _messages.add(const _GuessMessage(name: 'System', text: 'New round started!', isSystem: true));
-    setState(() {
-      _stage = _DrawStage.playing;
-    });
-    _startTimer();
-    _startAiGuessing();
-    _scrollChatToBottom();
-  }
-
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) return;
-      if (_timeLeft <= 0) {
-        timer.cancel();
-        _endRound(success: false, reason: 'Time is up');
-      } else {
-        setState(() {
-          _timeLeft--;
-          if (_timeLeft % 15 == 0) {
-            _revealHintLetter();
-          }
-        });
-      }
-    });
-  }
-
-  void _startAiGuessing() {
-    if (_hasPlayers) return; // player guesses instead of AI
-    _aiTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      if (!mounted || _stage != _DrawStage.playing) return;
-      final aiName = _aiNames[_rng.nextInt(_aiNames.length)];
-      final guess = _generateAiGuess();
-      _addGuess(aiName, guess);
-      if (_isCorrectGuess(guess)) {
-        _endRound(success: true, reason: '$aiName guessed correctly');
-      }
-    });
-  }
-
-  String _generateAiGuess() {
-    final base = _wordToDraw.toLowerCase();
-    final chance = _rng.nextDouble();
-    if (chance > 0.75 && _revealedIndices.length >= 2) {
-      return base;
-    }
-    if (chance > 0.4) {
-      final hint = _buildHint().replaceAll(' ', '');
-      return hint.replaceAll('_', base[_rng.nextInt(base.length)]).toLowerCase();
-    }
-    const decoys = ['car', 'house', 'tree', 'cat', 'dog', 'star', 'phone', 'book'];
-    return decoys[_rng.nextInt(decoys.length)];
-  }
-
-  void _addGuess(String name, String text, {bool correct = false}) {
-    _messages.add(_GuessMessage(name: name, text: text, isCorrect: correct));
-    _scrollChatToBottom();
-    setState(() {});
+  void _handleFinish() {
+    if (!mounted) return;
+    if (_controller.stage != DrawStage.finished) return;
+    if (_didNavigate) return;
+    _didNavigate = true;
+    final gameInfo = GameCatalog.allGames.firstWhere(
+      (g) => g.id == 'draw_guess',
+      orElse: () => GameCatalog.allGames[0],
+    );
+    final win = _controller.correctRounds >= 2;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => GameResultScreen(
+          gameInfo: gameInfo,
+          score: _controller.score,
+          isWin: win,
+          customMessage: 'Rounds won ${_controller.correctRounds}/${_controller.totalRounds}',
+          onReplay: () => Navigator.of(context).pushReplacementNamed('/draw-guess'),
+        ),
+      ),
+    );
   }
 
   void _scrollChatToBottom() {
@@ -190,150 +80,27 @@ class _DrawGuessScreenState extends State<DrawGuessScreen> {
     });
   }
 
-  void _endRound({required bool success, required String reason}) {
-    _timer?.cancel();
-    _aiTimer?.cancel();
-    if (success) {
-      GameFeedbackService.success();
-      _correctRounds++;
-      final roundScore = _calculateRoundScore();
-      _score += roundScore;
-      _addGuess('System', '$reason • +$roundScore XP', correct: true);
-    } else {
-      GameFeedbackService.error();
-      _addGuess('System', reason, correct: false);
-    }
-
-    if (_roundIndex >= _totalRounds) {
-      _finishGame();
-    } else {
-      setState(() {
-        _stage = _DrawStage.roundEnd;
-      });
-      Future.delayed(const Duration(seconds: 2), () {
-        if (!mounted) return;
-        _nextRound();
-      });
-    }
-  }
-
-  int _calculateRoundScore() {
-    const base = 120;
-    final timeBonus = _timeLeft * 2;
-    final hintPenalty = _hintsUsed * 15;
-    return max(30, base + timeBonus - hintPenalty);
-  }
-
-  void _finishGame() {
-    setState(() {
-      _stage = _DrawStage.finished;
-    });
-    final gameInfo = GameCatalog.allGames.firstWhere((g) => g.id == 'draw_guess', orElse: () => GameCatalog.allGames[0]);
-    final win = _correctRounds >= 2;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => GameResultScreen(
-          gameInfo: gameInfo,
-          score: _score,
-          isWin: win,
-          customMessage: 'Rounds won $_correctRounds/$_totalRounds',
-          onReplay: () => Navigator.of(context).pushReplacementNamed('/draw-guess'),
-        ),
-      ),
-    );
-  }
-
-  void _onPanStart(DragStartDetails details) {
-    if (_stage != _DrawStage.playing) return;
-    setState(() {
-      _currentStroke = _Stroke(
-        points: [details.localPosition],
-        color: _selectedColor,
-        width: _selectedBrush,
-        isEraser: _isEraser,
-      );
-      _strokes.add(_currentStroke!);
-    });
-  }
-
-  void _onPanUpdate(DragUpdateDetails details) {
-    if (_stage != _DrawStage.playing || _currentStroke == null) return;
-    setState(() {
-      _currentStroke!.points.add(details.localPosition);
-    });
-  }
-
-  void _onPanEnd(DragEndDetails details) {
-    if (_stage != _DrawStage.playing || _currentStroke == null) return;
-    setState(() {
-      _currentStroke!.points.add(null);
-      _currentStroke = null;
-    });
-  }
-
-  void _clearCanvas() {
-    GameFeedbackService.tap();
-    setState(() {
-      _strokes.clear();
-    });
-  }
-
-  void _undoStroke() {
-    if (_strokes.isEmpty) return;
-    GameFeedbackService.tap();
-    setState(() {
-      _strokes.removeLast();
-    });
-  }
-
-  void _revealHintLetter() {
-    if (_revealedIndices.length >= _wordToDraw.length) return;
-    final candidates = List<int>.generate(_wordToDraw.length, (i) => i).where((i) => _wordToDraw[i] != ' ').toList();
-    candidates.removeWhere(_revealedIndices.contains);
-    if (candidates.isEmpty) return;
-    _revealedIndices.add(candidates[_rng.nextInt(candidates.length)]);
-    _hintsUsed++;
-  }
-
-  String _buildHint() {
-    return _wordToDraw.split('').asMap().entries.map((entry) {
-      final idx = entry.key;
-      final ch = entry.value;
-      if (ch == ' ') return ' ';
-      return _revealedIndices.contains(idx) ? ch : '_';
-    }).join(' ');
-  }
-
-  bool _isCorrectGuess(String guess) {
-    final normalized = guess.trim().toUpperCase();
-    return normalized == _wordToDraw;
-  }
-
-  void _submitGuess() {
-    final guess = _guessController.text.trim();
-    if (guess.isEmpty) return;
-    _guessController.clear();
-    _addGuess('You', guess);
-    if (_isCorrectGuess(guess)) {
-      _endRound(success: true, reason: 'You guessed correctly');
-    } else {
-      GameFeedbackService.error();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    return GameBaseScreen(
-      title: 'Draw & Guess',
-      score: _score,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        child: _stage == _DrawStage.intro ? _buildIntro() : _buildGame(),
+    return ChangeNotifierProvider.value(
+      value: _controller,
+      child: Consumer<DrawGuessController>(
+        builder: (context, controller, _) {
+          return GameBaseScreen(
+            title: 'Draw & Guess',
+            score: controller.score,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: controller.stage == DrawStage.intro ? _buildIntro(context, controller) : _buildGame(controller),
+            ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildIntro() {
+  Widget _buildIntro(BuildContext context, DrawGuessController controller) {
+    final provider = context.watch<GameProvider>();
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -361,26 +128,104 @@ class _DrawGuessScreenState extends State<DrawGuessScreen> {
                   children: [
                     ChoiceChip(
                       label: const Text('Solo (AI guesses)'),
-                      selected: !_hasPlayers,
+                      selected: !controller.hasPlayers,
                       selectedColor: AppConstants.secondaryColor.withAlpha(70),
                       backgroundColor: Colors.white.withAlpha(10),
-                      labelStyle: TextStyle(color: !_hasPlayers ? Colors.white : Colors.white70, fontWeight: FontWeight.w700),
-                      onSelected: (_) => setState(() => _hasPlayers = false),
+                      labelStyle: TextStyle(color: !controller.hasPlayers ? Colors.white : Colors.white70, fontWeight: FontWeight.w700),
+                      onSelected: (_) => controller.setHasPlayers(false),
                     ),
                     const SizedBox(width: 10),
                     ChoiceChip(
                       label: const Text('Local Players'),
-                      selected: _hasPlayers,
+                      selected: controller.hasPlayers,
                       selectedColor: AppConstants.primaryColor.withAlpha(70),
                       backgroundColor: Colors.white.withAlpha(10),
-                      labelStyle: TextStyle(color: _hasPlayers ? Colors.white : Colors.white70, fontWeight: FontWeight.w700),
-                      onSelected: (_) => setState(() => _hasPlayers = true),
+                      labelStyle: TextStyle(color: controller.hasPlayers ? Colors.white : Colors.white70, fontWeight: FontWeight.w700),
+                      onSelected: (_) => controller.setHasPlayers(true),
                     ),
                   ],
                 ),
+                if (controller.hasPlayers) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _playerController,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: 'Add player name',
+                            hintStyle: const TextStyle(color: AppConstants.textSecondary),
+                            filled: true,
+                            fillColor: Colors.white.withAlpha(10),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: () {
+                          controller.addLocalPlayer(_playerController.text);
+                          _playerController.clear();
+                        },
+                        icon: const Icon(Icons.add),
+                        style: IconButton.styleFrom(backgroundColor: AppConstants.primaryColor, foregroundColor: Colors.white),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: controller.players
+                        .map((p) => Chip(
+                              label: Text(p.name, style: const TextStyle(color: Colors.white)),
+                              backgroundColor: Colors.white.withAlpha(10),
+                              deleteIconColor: Colors.white70,
+                              onDeleted: () => controller.removePlayer(p),
+                            ))
+                        .toList(),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: provider.currentRoom == null
+                              ? null
+                              : () {
+                                  final mapped = provider.currentRoom!.players
+                                      .map((p) => LocalPlayer(id: p.id, name: p.name))
+                                      .toList();
+                                  controller.syncPlayersFromRoom(mapped);
+                                },
+                          icon: const Icon(Icons.wifi),
+                          label: const Text('Use Wi‑Fi room players'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.of(context).push(AppRoute.fadeSlide(const WifiCreateRoomScreen())),
+                          child: const Text('Host on Wi‑Fi', style: TextStyle(color: AppConstants.secondaryColor)),
+                        ),
+                      ),
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () => Navigator.of(context).push(AppRoute.fadeSlide(const WifiJoinRoomScreen())),
+                          child: const Text('Join on Wi‑Fi', style: TextStyle(color: AppConstants.secondaryColor)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: _startGame,
+                  onPressed: controller.startGame,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppConstants.primaryColor,
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -396,64 +241,68 @@ class _DrawGuessScreenState extends State<DrawGuessScreen> {
     );
   }
 
-  Widget _buildGame() {
+  Widget _buildGame(DrawGuessController controller) {
     return Column(
       children: [
-        _buildTopBar(),
+        _buildTopBar(controller),
         const SizedBox(height: 12),
         LinearProgressIndicator(
-          value: _timeLeft / 90,
+          value: controller.timeLeft / 90,
           minHeight: 6,
           backgroundColor: Colors.white.withAlpha(10),
           valueColor: AlwaysStoppedAnimation<Color>(
-            _timeLeft < 15 ? AppConstants.errorColor : AppConstants.primaryColor,
+            controller.timeLeft < 15 ? AppConstants.errorColor : AppConstants.primaryColor,
           ),
         ),
         const SizedBox(height: 12),
-        _buildHintCard(),
+        _buildHintCard(controller),
         const SizedBox(height: 12),
         Expanded(
           child: Row(
             children: [
-              Expanded(flex: 3, child: _buildCanvas()),
+              Expanded(flex: 3, child: _buildCanvas(controller)),
               const SizedBox(width: 12),
-              Expanded(flex: 2, child: _buildChatPanel()),
+              Expanded(flex: 2, child: _buildChatPanel(controller)),
             ],
           ),
         ),
         const SizedBox(height: 12),
-        _buildTools(),
+        _buildTools(controller),
       ],
     );
   }
 
-  Widget _buildTopBar() {
+  Widget _buildTopBar(DrawGuessController controller) {
     return Row(
       children: [
-        _buildChip('Round $_roundIndex/$_totalRounds', AppConstants.secondaryColor),
+        _buildChip('Round ${controller.roundIndex}/${controller.totalRounds}', AppConstants.secondaryColor),
         const SizedBox(width: 8),
-        _buildChip('Score $_score', AppConstants.successColor),
+        _buildChip('Score ${controller.score}', AppConstants.successColor),
         const SizedBox(width: 8),
-        _buildChip(_hasPlayers ? 'Players' : 'AI', AppConstants.primaryColor),
+        _buildChip(controller.hasPlayers ? 'Players' : 'AI', AppConstants.primaryColor),
+        if (controller.hasPlayers && controller.players.isNotEmpty) ...[
+          const SizedBox(width: 8),
+          _buildChip('Drawer: ${controller.players[controller.drawerIndex].name}', AppConstants.accentGold),
+        ],
         const Spacer(),
-        _buildChip('${_timeLeft}s', AppConstants.warningColor),
+        _buildChip('${controller.timeLeft}s', AppConstants.warningColor),
       ],
     );
   }
 
-  Widget _buildHintCard() {
+  Widget _buildHintCard(DrawGuessController controller) {
     return GlassCard(
       child: Row(
         children: [
           Expanded(
             child: Text(
-              'WORD: ${_buildHint()}',
+              'WORD: ${controller.buildHint()}',
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
             ),
           ),
           const SizedBox(width: 8),
           TextButton(
-            onPressed: _revealHintLetter,
+            onPressed: controller.revealHintLetter,
             child: const Text('Reveal Hint', style: TextStyle(color: AppConstants.accentGold)),
           ),
         ],
@@ -461,7 +310,7 @@ class _DrawGuessScreenState extends State<DrawGuessScreen> {
     );
   }
 
-  Widget _buildCanvas() {
+  Widget _buildCanvas(DrawGuessController controller) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -470,11 +319,11 @@ class _DrawGuessScreenState extends State<DrawGuessScreen> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: GestureDetector(
-          onPanStart: _onPanStart,
-          onPanUpdate: _onPanUpdate,
-          onPanEnd: _onPanEnd,
+          onPanStart: controller.onPanStart,
+          onPanUpdate: controller.onPanUpdate,
+          onPanEnd: controller.onPanEnd,
           child: CustomPaint(
-            painter: _DrawingPainter(_strokes),
+            painter: _DrawingPainter(controller.strokes),
             child: Container(),
           ),
         ),
@@ -482,19 +331,32 @@ class _DrawGuessScreenState extends State<DrawGuessScreen> {
     );
   }
 
-  Widget _buildChatPanel() {
+  Widget _buildChatPanel(DrawGuessController controller) {
     return GlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text('Guesses', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
+          if (controller.hasPlayers && controller.players.isNotEmpty) ...[
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: controller.players
+                  .map((p) => Chip(
+                        label: Text('${p.name} • ${p.score}', style: const TextStyle(color: Colors.white)),
+                        backgroundColor: Colors.white.withAlpha(10),
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 8),
+          ],
           Expanded(
             child: ListView.builder(
               controller: _chatController,
-              itemCount: _messages.length,
+              itemCount: controller.messages.length,
               itemBuilder: (context, index) {
-                final msg = _messages[index];
+                final msg = controller.messages[index];
                 final color = msg.isSystem
                     ? AppConstants.textSecondary
                     : msg.isCorrect
@@ -507,8 +369,29 @@ class _DrawGuessScreenState extends State<DrawGuessScreen> {
               },
             ),
           ),
-          if (_hasPlayers) ...[
+          if (controller.hasPlayers) ...[
             const SizedBox(height: 8),
+            if (controller.players.isNotEmpty) ...[
+              DropdownButton<int>(
+                value: controller.selectedGuesserIndex,
+                isExpanded: true,
+                dropdownColor: AppConstants.surfaceColor,
+                iconEnabledColor: Colors.white,
+                items: List.generate(controller.players.length, (i) {
+                  final p = controller.players[i];
+                  final isDrawer = i == controller.drawerIndex;
+                  return DropdownMenuItem(
+                    value: i,
+                    child: Text(
+                      isDrawer ? '${p.name} (Drawer)' : p.name,
+                      style: TextStyle(color: isDrawer ? AppConstants.textMuted : Colors.white),
+                    ),
+                  );
+                }),
+                onChanged: (v) => controller.setSelectedGuesserIndex(v ?? 0),
+              ),
+              const SizedBox(height: 8),
+            ],
             Row(
               children: [
                 Expanded(
@@ -518,7 +401,7 @@ class _DrawGuessScreenState extends State<DrawGuessScreen> {
                     decoration: InputDecoration(
                       filled: true,
                       fillColor: Colors.white.withAlpha(10),
-                      hintText: 'Enter guess...',
+                      hintText: controller.aiVerifying ? 'AI verifying...' : 'Enter guess...',
                       hintStyle: const TextStyle(color: AppConstants.textSecondary),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                     ),
@@ -526,7 +409,13 @@ class _DrawGuessScreenState extends State<DrawGuessScreen> {
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  onPressed: _submitGuess,
+                  onPressed: controller.aiVerifying
+                      ? null
+                      : () async {
+                          final text = _guessController.text;
+                          _guessController.clear();
+                          await controller.submitGuess(text);
+                        },
                   icon: const Icon(Icons.send),
                   style: IconButton.styleFrom(backgroundColor: AppConstants.primaryColor, foregroundColor: Colors.white),
                 ),
@@ -538,7 +427,7 @@ class _DrawGuessScreenState extends State<DrawGuessScreen> {
     );
   }
 
-  Widget _buildTools() {
+  Widget _buildTools(DrawGuessController controller) {
     return GlassCard(
       child: Column(
         children: [
@@ -546,8 +435,8 @@ class _DrawGuessScreenState extends State<DrawGuessScreen> {
             children: [
               const Text('Brush', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               const SizedBox(width: 12),
-              ..._brushSizes.map((size) {
-                final selected = _selectedBrush == size;
+              ...controller.brushSizes.map((size) {
+                final selected = controller.selectedBrush == size;
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: ChoiceChip(
@@ -556,17 +445,17 @@ class _DrawGuessScreenState extends State<DrawGuessScreen> {
                     selectedColor: AppConstants.primaryColor.withAlpha(60),
                     backgroundColor: Colors.white.withAlpha(10),
                     labelStyle: TextStyle(color: selected ? Colors.white : Colors.white70, fontWeight: FontWeight.w700),
-                    onSelected: (_) => setState(() => _selectedBrush = size),
+                    onSelected: (_) => controller.setSelectedBrush(size),
                   ),
                 );
               }),
               const Spacer(),
               IconButton(
-                onPressed: _undoStroke,
+                onPressed: controller.undoStroke,
                 icon: const Icon(Icons.undo, color: Colors.white),
               ),
               IconButton(
-                onPressed: _clearCanvas,
+                onPressed: controller.clearCanvas,
                 icon: const Icon(Icons.delete, color: Colors.white),
               ),
             ],
@@ -577,27 +466,25 @@ class _DrawGuessScreenState extends State<DrawGuessScreen> {
             child: Row(
               children: [
                 GestureDetector(
-                  onTap: () => setState(() => _isEraser = !_isEraser),
+                  onTap: controller.toggleEraser,
                   child: Container(
                     width: 34,
                     height: 34,
                     margin: const EdgeInsets.only(right: 10),
                     decoration: BoxDecoration(
-                      color: _isEraser ? AppConstants.errorColor : Colors.white.withAlpha(10),
+                      color: controller.isEraser ? AppConstants.errorColor : Colors.white.withAlpha(10),
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white24),
                     ),
                     child: const Icon(Icons.auto_fix_off, color: Colors.white, size: 18),
                   ),
                 ),
-                ..._palette.map((c) {
-                  final selected = _selectedColor == c && !_isEraser;
+                ...controller.palette.map((c) {
+                  final selected = controller.selectedColor == c && !controller.isEraser;
                   return GestureDetector(
                     onTap: () {
-                      setState(() {
-                        _isEraser = false;
-                        _selectedColor = c;
-                      });
+                      if (controller.isEraser) controller.toggleEraser();
+                      controller.setSelectedColor(c);
                     },
                     child: Container(
                       width: 30,
@@ -633,7 +520,7 @@ class _DrawGuessScreenState extends State<DrawGuessScreen> {
 }
 
 class _DrawingPainter extends CustomPainter {
-  final List<_Stroke> strokes;
+  final List<Stroke> strokes;
   _DrawingPainter(this.strokes);
 
   @override

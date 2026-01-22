@@ -244,6 +244,28 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // PROFILE UPDATES
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  Future<void> updateDisplayName(String name) async {
+    try {
+      // Update locally first so UI feels instant
+      if (_user != null) {
+        _user = UserProfile(uid: _user!.uid, email: _user!.email, name: name);
+        notifyListeners();
+      }
+
+      if (!_ensureFirebaseReady()) return;
+      final current = _firebaseAuth.currentUser;
+      if (current != null) {
+        await current.updateDisplayName(name);
+      }
+    } catch (e) {
+      debugPrint('AuthProvider.updateDisplayName error: $e');
+    }
+  }
+
   void _setError(GameError error) {
     _authError = error;
     notifyListeners();

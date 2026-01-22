@@ -4,6 +4,13 @@ import 'package:facecode/providers/progress_provider.dart';
 import 'package:facecode/utils/constants.dart';
 import 'package:facecode/providers/auth_provider.dart';
 import 'package:facecode/widgets/premium_ui.dart';
+import 'package:facecode/routing/app_route.dart';
+import 'package:facecode/screens/settings/edit_profile_screen.dart';
+import 'package:facecode/screens/settings/notifications_screen.dart';
+import 'package:facecode/screens/settings/privacy_screen.dart';
+import 'package:facecode/screens/settings/help_support_screen.dart';
+import 'package:facecode/screens/login_screen.dart';
+import 'package:facecode/utils/app_dialogs.dart';
 
 /// Modern Profile Screen matching Play Store game hub style
 class ProfileScreen extends StatelessWidget {
@@ -358,22 +365,22 @@ class ProfileScreen extends StatelessWidget {
         _buildMenuItem(
           icon: Icons.person_outline_rounded,
           label: 'Edit Profile',
-          onTap: () {},
+          onTap: () => Navigator.of(context).push(AppRoute.fadeSlide(const EditProfileScreen())),
         ),
         _buildMenuItem(
           icon: Icons.notifications_outlined,
           label: 'Notifications',
-          onTap: () {},
+          onTap: () => Navigator.of(context).push(AppRoute.fadeSlide(const NotificationsScreen())),
         ),
         _buildMenuItem(
           icon: Icons.privacy_tip_outlined,
           label: 'Privacy',
-          onTap: () {},
+          onTap: () => Navigator.of(context).push(AppRoute.fadeSlide(const PrivacyScreen())),
         ),
         _buildMenuItem(
           icon: Icons.help_outline_rounded,
           label: 'Help & Support',
-          onTap: () {},
+          onTap: () => Navigator.of(context).push(AppRoute.fadeSlide(const HelpSupportScreen())),
         ),
       ],
     );
@@ -429,7 +436,7 @@ class ProfileScreen extends StatelessWidget {
   Widget _buildLogoutButton(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        // Handle logout
+        _confirmLogout(context);
       },
       child: Container(
         width: double.infinity,
@@ -462,6 +469,61 @@ class ProfileScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _confirmLogout(BuildContext context) async {
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (dialogCtx) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppConstants.surfaceColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppConstants.borderColor),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Log out?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18)),
+                const SizedBox(height: 8),
+                Text('You will need to sign in again to access your account.', style: TextStyle(color: AppConstants.textMuted)),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogCtx).pop(),
+                      child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () async {
+                        final auth = dialogCtx.read<AuthProvider>();
+                        await auth.signOut();
+                        if (!dialogCtx.mounted) return;
+                        Navigator.of(dialogCtx).pop();
+                        Navigator.of(context).pushAndRemoveUntil(
+                          AppRoute.fadeSlide(const LoginScreen()),
+                          (route) => false,
+                        );
+                        AppDialogs.showSnack(context, 'Logged out');
+                      },
+                      child: Text('Log Out', style: TextStyle(color: AppConstants.errorColor, fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
