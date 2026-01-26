@@ -2,11 +2,17 @@ class UserProfile {
   final String uid;
   final String email;
   final String name;
+  final String avatarEmoji;
+  final bool isAnonymous;
+  final bool isElite;
 
   UserProfile({
     required this.uid,
     this.email = '',
     this.name = '',
+    this.avatarEmoji = '🙂',
+    this.isAnonymous = false,
+    this.isElite = false,
   });
 
   /// Display name for UI (name or email)

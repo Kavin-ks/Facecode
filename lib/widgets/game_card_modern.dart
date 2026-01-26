@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:facecode/models/game_metadata.dart';
 import 'package:facecode/utils/constants.dart';
+import 'package:facecode/utils/motion.dart';
 import 'package:facecode/widgets/premium_ui.dart';
+import 'package:facecode/widgets/ui_kit.dart';
 
 /// Modern game card matching Play Store game hub style
 class GameCardModern extends StatelessWidget {
   final GameMetadata game;
   final VoidCallback onTap;
+  final int index;
 
   const GameCardModern({
     super.key,
     required this.game,
     required this.onTap,
+    this.index = 0,
   });
 
   Color get _cardColor {
@@ -33,7 +38,7 @@ class GameCardModern extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return PremiumTap(
       onTap: onTap,
       child: GlassCard(
         padding: const EdgeInsets.all(16),
@@ -126,7 +131,10 @@ class GameCardModern extends StatelessWidget {
           ],
         ),
       ),
-    );
+    )
+    .animate(delay: AppMotion.stagger(index))
+    .fadeIn(duration: AppMotion.durationMedium)
+    .slideY(begin: 0.1, end: 0, curve: AppMotion.curveStandard, duration: AppMotion.durationMedium);
   }
 
   Widget _buildInfoChip({required IconData icon, required String label}) {

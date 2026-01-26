@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:facecode/utils/constants.dart';
+import 'package:facecode/widgets/ui_kit.dart';
 
 /// Premium gradient background with animated particles effect
 class GradientBackground extends StatelessWidget {
@@ -53,7 +54,7 @@ class GlassCard extends StatelessWidget {
       Colors.white.withAlpha(4),
     ];
 
-    return GestureDetector(
+    return PremiumTap(
       onTap: onTap,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius),
@@ -194,13 +195,8 @@ class NeonCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = gradientColors ?? AppConstants.primaryGradient;
     
-    return GestureDetector(
-      onTap: () {
-        if (onTap != null) {
-          HapticFeedback.lightImpact();
-          onTap!();
-        }
-      },
+    return PremiumTap(
+      onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppConstants.borderRadius),

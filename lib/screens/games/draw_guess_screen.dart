@@ -61,8 +61,10 @@ class _DrawGuessScreenState extends State<DrawGuessScreen> {
           gameInfo: gameInfo,
           score: _controller.score,
           isWin: win,
+          onReplay: () {
+            Navigator.of(context).pop();
+          },
           customMessage: 'Rounds won ${_controller.correctRounds}/${_controller.totalRounds}',
-          onReplay: () => Navigator.of(context).pushReplacementNamed('/draw-guess'),
         ),
       ),
     );

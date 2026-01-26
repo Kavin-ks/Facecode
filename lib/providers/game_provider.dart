@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:facecode/models/game_room.dart';
 import 'package:facecode/models/player.dart';
@@ -16,6 +17,9 @@ import 'package:facecode/models/discovered_room.dart';
 import 'package:facecode/services/stats_service.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:facecode/providers/settings_provider.dart';
+import 'package:facecode/services/sound_manager.dart';
+
 /// Game state management provider
 class GameProvider extends ChangeNotifier {
   GameRoom? _currentRoom;
@@ -23,6 +27,10 @@ class GameProvider extends ChangeNotifier {
   Timer? _gameTimer;
   String? _lastCorrectAnswer;
   final Uuid _uuid = const Uuid();
+
+  // Optional link to settings to determine user preferences (e.g., AI fallback)
+  // ignore: unused_field
+  final SettingsProvider? _settings;
 
   GameError? _uiError;
   bool _isBusy = false;
@@ -32,9 +40,12 @@ class GameProvider extends ChangeNotifier {
 
   bool _lastRoundWasCorrect = false;
   bool _lastRoundEndedByTime = false;
+  bool _afkWarningPending = false;
 
   final Map<String, DateTime> _lastGuessAt = {};
   final Map<String, String> _lastGuessText = {};
+  final List<Map<String, dynamic>> _pendingCorrectGuesses = [];
+  Timer? _tieBreakTimer;
 
   final DateTime Function() _now;
 
@@ -49,7 +60,7 @@ class GameProvider extends ChangeNotifier {
   int? _connectedPort;
   int _reconnectAttempts = 0; // for simple backoff
 
-  GameProvider({DateTime Function()? now}) : _now = now ?? DateTime.now;
+  GameProvider({DateTime Function()? now, SettingsProvider? settings}) : _now = now ?? DateTime.now, _settings = settings;
 
   List<DiscoveredRoom> get discoveredRooms => List.unmodifiable(_discoveredRooms);
   String get connectionStatus => _connectionStatus;
@@ -61,6 +72,7 @@ class GameProvider extends ChangeNotifier {
   bool get isBusy => _isBusy;
   bool get lastRoundWasCorrect => _lastRoundWasCorrect;
   bool get lastRoundEndedByTime => _lastRoundEndedByTime;
+  bool get afkWarningPending => _afkWarningPending;
 
   /// In local multiplayer (same device), the "active" player is whichever
   /// player is currently holding the phone.
@@ -253,6 +265,7 @@ class GameProvider extends ChangeNotifier {
                 'id': pid,
                 'name': pname,
               });
+              SoundManager().playUiSound(SoundManager.sfxPlayerJoin, throttleMs: 500);
 
               // Also send the full room info to the new client
               try {
@@ -266,6 +279,16 @@ class GameProvider extends ChangeNotifier {
                 notifyListeners();
                 // broadcast to everyone (including origin)
                 _socketManager!.broadcast({'type': 'emoji', 'emoji': emoji});
+                SoundManager().playUiSound(SoundManager.sfxChatMessage, throttleMs: 200);
+              }
+            } else if (type == 'guess') {
+              final guess = msg['guess'] ?? '';
+              final pid = msg['playerId'] ?? '';
+              final timestampStr = msg['clientTimestamp'] as String?;
+              final ts = timestampStr != null ? DateTime.tryParse(timestampStr) : null;
+              
+              if (guess.isNotEmpty && pid.isNotEmpty) {
+                submitGuess(guess, pid, clientTimestamp: ts);
               }
             } else if (type == 'start') {
               // Clients shouldn't send start; ignore
@@ -280,8 +303,10 @@ class GameProvider extends ChangeNotifier {
             if (pid != null && _currentRoom != null) {
               final remaining = _currentRoom!.players.where((p) => p.id != pid).toList();
               _currentRoom = _currentRoom!.copyWith(players: remaining);
+              _currentRoom = _currentRoom!.copyWith(players: remaining);
               _socketManager!.broadcast({'type': 'player_left', 'id': pid});
               notifyListeners();
+              SoundManager().playUiSound(SoundManager.sfxPlayerLeave);
             }
           } catch (_) {}
         });
@@ -376,6 +401,7 @@ class GameProvider extends ChangeNotifier {
             if (_currentRoom != null) {
               _currentRoom = _currentRoom!.copyWith(players: [..._currentRoom!.players, p]);
               notifyListeners();
+              SoundManager().playUiSound(SoundManager.sfxPlayerJoin, throttleMs: 500);
             }
           } else if (type == 'room_full') {
             _setError(const GameError(
@@ -397,9 +423,16 @@ class GameProvider extends ChangeNotifier {
             // Host started the round: set prompt and start timer locally
             final promptMap = msg['prompt'] as Map<String, dynamic>?;
             final duration = msg['duration'] as int? ?? AppConstants.roundDuration;
+            final endsAtStr = msg['endsAt'] as String?;
             final prompt = promptMap != null ? GamePrompt.fromJson(promptMap) : null;
             _currentRoom = _currentRoom!.copyWith(state: GameState.playing, currentPrompt: prompt, roundTimeRemaining: duration, emojiMessages: []);
-            _roundEndsAt = _now().add(Duration(seconds: duration));
+            
+            if (endsAtStr != null) {
+              _roundEndsAt = DateTime.parse(endsAtStr);
+            } else {
+              _roundEndsAt = _now().add(Duration(seconds: duration));
+            }
+            
             _pausedRemaining = null;
             _startTimer();
           } else if (type == 'round_end') {
@@ -435,13 +468,21 @@ class GameProvider extends ChangeNotifier {
                 actionLabel: 'OK',
               ));
               notifyListeners();
+              SoundManager().playUiSound(SoundManager.sfxPlayerLeave);
             }
           } else if (type == 'next_round') {
             final promptMap = msg['prompt'] as Map<String, dynamic>?;
             final duration = msg['duration'] as int? ?? AppConstants.roundDuration;
+            final endsAtStr = msg['endsAt'] as String?;
             final prompt = promptMap != null ? GamePrompt.fromJson(promptMap) : null;
             _currentRoom = _currentRoom!.copyWith(state: GameState.playing, currentPrompt: prompt, roundTimeRemaining: duration, emojiMessages: []);
-            _roundEndsAt = _now().add(Duration(seconds: duration));
+            
+            if (endsAtStr != null) {
+              _roundEndsAt = DateTime.parse(endsAtStr);
+            } else {
+              _roundEndsAt = _now().add(Duration(seconds: duration));
+            }
+
             _pausedRemaining = null;
             _startTimer();
           }
@@ -550,9 +591,16 @@ class GameProvider extends ChangeNotifier {
           } else if (type == 'start') {
             final promptMap = msg['prompt'] as Map<String, dynamic>?;
             final duration = msg['duration'] as int? ?? AppConstants.roundDuration;
+            final endsAtStr = msg['endsAt'] as String?;
             final prompt = promptMap != null ? GamePrompt.fromJson(promptMap) : null;
             _currentRoom = _currentRoom!.copyWith(state: GameState.playing, currentPrompt: prompt, roundTimeRemaining: duration, emojiMessages: []);
-            _roundEndsAt = _now().add(Duration(seconds: duration));
+            
+            if (endsAtStr != null) {
+              _roundEndsAt = DateTime.parse(endsAtStr);
+            } else {
+              _roundEndsAt = _now().add(Duration(seconds: duration));
+            }
+            
             _pausedRemaining = null;
             _startTimer();
           }
@@ -668,10 +716,15 @@ class GameProvider extends ChangeNotifier {
       _startTimer();
       SoundService.roundStart();
 
-      // Networking: if hosting, broadcast start with prompt
+      // Networking: if hosting, broadcast start with prompt and target end time
       try {
         if (_connectionStatus == 'hosting' && _socketManager != null) {
-          _socketManager!.broadcast({'type': 'start', 'prompt': _currentRoom!.currentPrompt?.toJson(), 'duration': AppConstants.roundDuration});
+          _socketManager!.broadcast({
+            'type': 'start',
+            'prompt': _currentRoom!.currentPrompt?.toJson(),
+            'duration': AppConstants.roundDuration,
+            'endsAt': _roundEndsAt?.toIso8601String(),
+          });
         }
       } catch (_) {}
     } catch (_) {
@@ -711,8 +764,13 @@ class GameProvider extends ChangeNotifier {
       }
 
       final remaining = endsAt.difference(_now());
-      final secondsLeft = remaining.inSeconds.clamp(0, AppConstants.roundDuration);
-      if (secondsLeft <= 0) {
+      final secondsLeft = remaining.inSeconds;
+      
+      // AFK Warning and Tick logic should use original secondsLeft
+      // but for result handling, we allow a grace period
+      final displaySeconds = secondsLeft.clamp(0, AppConstants.roundDuration);
+
+      if (secondsLeft <= -AppConstants.latencyGracePeriod.inSeconds) {
         timer.cancel();
         _currentRoom = _currentRoom!.copyWith(roundTimeRemaining: 0);
         notifyListeners();
@@ -720,11 +778,29 @@ class GameProvider extends ChangeNotifier {
         return;
       }
 
-      if (secondsLeft != _currentRoom!.roundTimeRemaining) {
-        _currentRoom = _currentRoom!.copyWith(roundTimeRemaining: secondsLeft);
+      if (displaySeconds != _currentRoom!.roundTimeRemaining) {
+        // Countdown sound (last 4 seconds: 3, 2, 1, 0)
+        if (displaySeconds <= 4 && displaySeconds > 0) {
+           SoundManager().playGameSound(SoundManager.sfxTimerTick, volumeScale: 0.6);
+        }
+
+        // AFK Warning: Trigger at 5 seconds if active player is local
+        final activePlayer = _currentRoom?.currentEmojiPlayer;
+        if (displaySeconds == 5 && activePlayer != null && !activePlayer.isAI && activePlayer.id == _currentPlayer?.id) {
+          _afkWarningPending = true;
+          debugPrint('⚠️ AFK WARNING TRIGGERED for ${activePlayer.name}');
+          SoundManager().playGameSound(SoundManager.sfxUiTap, volumeScale: 1.0, haptic: HapticType.heavy);
+        }
+
+        _currentRoom = _currentRoom!.copyWith(roundTimeRemaining: displaySeconds);
         notifyListeners();
       }
     });
+  }
+
+  void consumeAFKWarning() {
+    _afkWarningPending = false;
+    notifyListeners();
   }
 
   /// Pause timer safely (e.g., app in background).
@@ -792,6 +868,7 @@ class GameProvider extends ChangeNotifier {
         emojiMessages: [..._currentRoom!.emojiMessages, value],
       );
       notifyListeners();
+      SoundManager().playUiSound(SoundManager.sfxChatMessage, throttleMs: 200);
       SoundService.tap();
 
       // Networking: propagate emoji messages to remote players
@@ -813,13 +890,24 @@ class GameProvider extends ChangeNotifier {
   }
 
   /// Submit a guess (for non-emoji players)
-  bool submitGuess(String guess, String playerId) {
+  bool submitGuess(String guess, String playerId, {DateTime? clientTimestamp}) {
     try {
       if (_currentRoom == null || _currentRoom!.currentPrompt == null) {
         return false;
       }
 
-      if (_currentRoom!.state != GameState.playing) return false;
+      if (_currentRoom!.state != GameState.playing) {
+        // Allow a small grace period for network delays if the host just ended the round
+        final endsAt = _roundEndsAt;
+        if (endsAt != null) {
+          final diff = _now().difference(endsAt);
+          if (diff > AppConstants.latencyGracePeriod) {
+            return false;
+          }
+        } else {
+          return false;
+        }
+      }
 
       // Emoji player is not allowed to submit a text guess.
       if (_currentRoom!.isEmojiPlayer(playerId)) {
@@ -871,21 +959,54 @@ class GameProvider extends ChangeNotifier {
       _lastGuessAt[playerId] = _now();
       _lastGuessText[playerId] = normalized;
 
+      // Networking: propagate guess to host if we are a client
+      try {
+        if (_connectionStatus == 'connected' && _socketManager != null) {
+          _socketManager!.sendToHost({
+            'type': 'guess',
+            'guess': guess,
+            'playerId': playerId,
+            'clientTimestamp': _now().toIso8601String(),
+          });
+        }
+      } catch (_) {}
+
       // Check if guess is correct (case-insensitive)
       final correctAnswer = _currentRoom!.currentPrompt!.text.toLowerCase();
       if (normalized == correctAnswer) {
-        final updatedPlayers = _currentRoom!.players.map((player) {
-          if (player.id == playerId) {
-            return player.copyWith(
-              score: player.score + AppConstants.pointsPerCorrectGuess,
-            );
-          }
-          return player;
-        }).toList();
+        // Collect correct guesses for a short window to handle ties fairly
+        final timestamp = clientTimestamp ?? _now();
+            
+        _pendingCorrectGuesses.add({
+          'playerId': playerId,
+          'timestamp': timestamp,
+        });
 
-        _currentRoom = _currentRoom!.copyWith(players: updatedPlayers);
-        SoundService.correct();
-        _endRound(true, endedByTime: false);
+        _tieBreakTimer ??= Timer(const Duration(milliseconds: 200), () {
+            if (_pendingCorrectGuesses.isEmpty) return;
+
+            // Sort by timestamp (earliest win)
+            _pendingCorrectGuesses.sort((a, b) => (a['timestamp'] as DateTime).compareTo(b['timestamp'] as DateTime));
+            
+            final winner = _pendingCorrectGuesses.first;
+            final winnerId = winner['playerId'] as String;
+
+            final updatedPlayers = _currentRoom!.players.map((player) {
+              if (player.id == winnerId) {
+                return player.copyWith(
+                  score: player.score + AppConstants.pointsPerCorrectGuess,
+                );
+              }
+              return player;
+            }).toList();
+
+            _currentRoom = _currentRoom!.copyWith(players: updatedPlayers);
+            SoundService.correct();
+            _endRound(true, endedByTime: false);
+            
+            _pendingCorrectGuesses.clear();
+            _tieBreakTimer = null;
+          });
         return true;
       }
 
@@ -906,7 +1027,11 @@ class GameProvider extends ChangeNotifier {
   void _endRound(bool wasCorrect, {required bool endedByTime}) async {
     try {
       _gameTimer?.cancel();
-      if (_currentRoom == null) return;
+      _tieBreakTimer?.cancel();
+      _tieBreakTimer = null;
+      _pendingCorrectGuesses.clear();
+      
+      if (_currentRoom == null || _currentRoom!.state == GameState.results) return;
 
       _lastCorrectAnswer = _currentRoom!.currentPrompt?.text;
       _lastRoundWasCorrect = wasCorrect;
@@ -942,6 +1067,34 @@ class GameProvider extends ChangeNotifier {
 
       if (endedByTime) {
         SoundService.roundEnd();
+        
+        // AFK Strike Logic
+        final activePlayer = _currentRoom?.currentEmojiPlayer;
+        if (activePlayer != null && !activePlayer.isAI) {
+          final newStrikes = activePlayer.afkStrikes + 1;
+          debugPrint('🚫 AFK STRIKE for ${activePlayer.name} ($newStrikes/2)');
+          
+          List<Player> updatedPlayers = _currentRoom!.players.map((p) {
+            if (p.id == activePlayer.id) {
+              final isAFK = newStrikes >= 2;
+              return p.copyWith(
+                afkStrikes: newStrikes,
+                isAFK: isAFK,
+                isAI: isAFK,
+              );
+            }
+            return p;
+          }).toList();
+          
+          _currentRoom = _currentRoom!.copyWith(players: updatedPlayers);
+          
+          if (newStrikes >= 2) {
+             debugPrint('🤖 AI HAS TAKEN OVER FOR ${activePlayer.name}');
+             // Subtle notification via snackbar or message
+             _lastCorrectAnswer = 'AI takeover initiated for ${activePlayer.name}';
+          }
+        }
+
         _setError(const GameError(
           type: GameErrorType.timeExpired,
           title: "Time’s Up!",
@@ -949,6 +1102,8 @@ class GameProvider extends ChangeNotifier {
           actionLabel: 'See Results',
         ));
       }
+
+      _afkWarningPending = false;
     } catch (_) {
       _setError(const GameError(
         type: GameErrorType.unknown,
@@ -999,10 +1154,20 @@ class GameProvider extends ChangeNotifier {
       _startTimer();
       SoundService.roundStart();
 
-      // Networking: host broadcasts next round info
+      // AFK AI Takeover: If current player is AI, trigger its action
+      if (_currentRoom?.currentEmojiPlayer?.isAI == true) {
+        _executeAIAction();
+      }
+
+      // Networking: host broadcasts next round info with target end time
       try {
         if (_connectionStatus == 'hosting' && _socketManager != null) {
-          _socketManager!.broadcast({'type': 'next_round', 'prompt': prompt.toJson(), 'duration': AppConstants.roundDuration});
+          _socketManager!.broadcast({
+            'type': 'next_round',
+            'prompt': prompt.toJson(),
+            'duration': AppConstants.roundDuration,
+            'endsAt': _roundEndsAt?.toIso8601String(),
+          });
         }
       } catch (_) {}
     } catch (_) {
@@ -1083,6 +1248,31 @@ class GameProvider extends ChangeNotifier {
     if (_currentRoom == null) return;
     _currentRoom = _currentRoom!.copyWith(emojiMessages: []);
     notifyListeners();
+  }
+
+  void _executeAIAction() {
+    if (_currentRoom == null || _currentRoom!.state != GameState.playing) return;
+    final activePlayer = _currentRoom!.currentEmojiPlayer;
+    if (activePlayer == null || !activePlayer.isAI) return;
+
+    debugPrint('🤖 AI [${activePlayer.name}] is thinking...');
+    
+    // AI thinks for 4-8 seconds to feel human-like
+    final delay = 4 + Random().nextInt(4);
+    Timer(Duration(seconds: delay), () {
+      if (_currentRoom == null || _currentRoom!.state != GameState.playing) return;
+      if (_currentRoom!.currentEmojiPlayer?.id != activePlayer.id) return;
+      
+      final prompt = _currentRoom!.currentPrompt;
+      if (prompt != null) {
+        // AI sends first few emojis from the prompt
+        final text = prompt.text;
+        final words = text.split(' ');
+        final hint = words.take(min(2, words.length)).join(' ');
+        debugPrint('🤖 AI [${activePlayer.name}] sends hint: $hint');
+        sendEmoji('🤔 $hint');
+      }
+    });
   }
 
   @override

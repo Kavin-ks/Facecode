@@ -1,4 +1,4 @@
-enum TwoTruthsPhase { setup, input, voting, reveal, scoreboard }
+enum TwoTruthsPhase { intro, setup, input, voting, reveal, scoreboard }
 
 class Statement {
   final String text;

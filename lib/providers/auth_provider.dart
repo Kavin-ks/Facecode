@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:facecode/models/user_profile.dart';
 import 'package:facecode/models/game_error.dart';
+import 'package:facecode/services/error_handler.dart';
 
 class AuthProvider extends ChangeNotifier {
   FirebaseAuth? _auth;
@@ -59,7 +60,7 @@ class AuthProvider extends ChangeNotifier {
         final prefs = await SharedPreferences.getInstance();
         final guestUid = prefs.getString(_guestUidKey);
         if (guestUid != null) {
-          _user = UserProfile(uid: guestUid, email: '', name: 'Guest Player');
+          _user = UserProfile(uid: guestUid, email: '', name: 'Guest Player', isAnonymous: true);
           notifyListeners();
         }
         return;
@@ -74,6 +75,8 @@ class AuthProvider extends ChangeNotifier {
           uid: current.uid,
           email: current.email ?? '',
           name: current.displayName ?? '',
+          avatarEmoji: current.photoURL ?? '🙂',
+          isAnonymous: current.isAnonymous,
         );
         notifyListeners();
       }
@@ -104,33 +107,16 @@ class AuthProvider extends ChangeNotifier {
 
       final cred = await _firebaseAuth.createUserWithEmailAndPassword(email: email, password: password);
       await cred.user?.updateDisplayName(name);
-      _user = UserProfile(uid: cred.user!.uid, email: email, name: name);
+      await cred.user?.updatePhotoURL('🙂');
+      _user = UserProfile(uid: cred.user!.uid, email: email, name: name, avatarEmoji: '🙂', isAnonymous: false);
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('remember_me', true);
 
       notifyListeners();
-    } on FirebaseAuthException catch (e) {
-      debugPrint('AuthProvider.register FirebaseAuthException: ${e.code} - ${e.message}');
-      switch (e.code) {
-        case 'email-already-in-use':
-          _setError(const GameError(type: GameErrorType.validation, title: 'Email in Use', message: 'This email is already registered.', actionLabel: 'OK'));
-          break;
-        case 'invalid-email':
-          _setError(const GameError(type: GameErrorType.validation, title: 'Invalid Email', message: 'Please enter a valid email address.', actionLabel: 'OK'));
-          break;
-        case 'weak-password':
-          _setError(const GameError(type: GameErrorType.validation, title: 'Weak Password', message: 'Password must be at least 6 characters.', actionLabel: 'OK'));
-          break;
-        case 'operation-not-allowed':
-          _setError(const GameError(type: GameErrorType.validation, title: 'Auth Disabled', message: 'Email/password sign-in is disabled. Enable it in Firebase Console -> Authentication -> Sign-in method.', actionLabel: 'OK'));
-          break;
-        default:
-          _setError(GameError(type: GameErrorType.unknown, title: 'Registration Failed', message: e.message ?? 'Could not create account. Please try again.', actionLabel: 'OK'));
-      }
     } catch (e) {
-      debugPrint('AuthProvider.register unknown exception: $e');
-      _setError(GameError(type: GameErrorType.unknown, title: 'Registration Failed', message: e.toString(), actionLabel: 'OK'));
+      debugPrint('AuthProvider.register exception: $e');
+      _setError(ErrorHandler.map(e));
     } finally {
       _isBusy = false;
       notifyListeners();
@@ -144,24 +130,19 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
 
       final cred = await _firebaseAuth.signInWithEmailAndPassword(email: email, password: password);
-      _user = UserProfile(uid: cred.user!.uid, email: cred.user!.email ?? '', name: cred.user!.displayName ?? '');
+      _user = UserProfile(
+          uid: cred.user!.uid,
+          email: cred.user!.email ?? '',
+          name: cred.user!.displayName ?? '',
+          isAnonymous: cred.user!.isAnonymous);
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('remember_me', true);
 
       notifyListeners();
-    } on FirebaseAuthException catch (e) {
-      debugPrint('AuthProvider.login FirebaseAuthException: ${e.code} - ${e.message}');
-      if (e.code == 'user-not-found') {
-        _setError(const GameError(type: GameErrorType.validation, title: 'User Not Found', message: 'No account found for that email.', actionLabel: 'OK'));
-      } else if (e.code == 'wrong-password') {
-        _setError(const GameError(type: GameErrorType.validation, title: 'Wrong Password', message: 'Wrong password. Please try again.', actionLabel: 'OK'));
-      } else {
-        _setError(const GameError(type: GameErrorType.unknown, title: 'Login Failed', message: 'Could not log in. Please try again.', actionLabel: 'OK'));
-      }
     } catch (e) {
-      debugPrint('AuthProvider.login unknown exception: $e');
-      _setError(const GameError(type: GameErrorType.unknown, title: 'Login Failed', message: 'Could not log in. Please try again.', actionLabel: 'OK'));
+      debugPrint('AuthProvider.login exception: $e');
+      _setError(ErrorHandler.map(e));
     } finally {
       _isBusy = false;
       notifyListeners();
@@ -182,23 +163,20 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
 
       final cred = await _firebaseAuth.signInAnonymously();
-      _user = UserProfile(uid: cred.user!.uid, email: '', name: 'Guest Player');
+      _user = UserProfile(uid: cred.user!.uid, email: '', name: 'Guest Player', isAnonymous: true);
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('remember_me', true);
       await prefs.remove(_guestUidKey);
 
       notifyListeners();
-    } on FirebaseAuthException catch (e) {
-      debugPrint('AuthProvider.signInAnonymously FirebaseAuthException: ${e.code} - ${e.message}');
-      if (e.code == 'operation-not-allowed' || e.code == 'admin-restricted-operation') {
-        await _signInGuestOffline();
-        return;
-      }
-      _setError(GameError(type: GameErrorType.unknown, title: 'Guest Login Failed', message: e.message ?? 'Could not sign in as guest.', actionLabel: 'OK'));
     } catch (e) {
-      debugPrint('AuthProvider.signInAnonymously unknown exception: $e');
-      _setError(const GameError(type: GameErrorType.unknown, title: 'Guest Login Failed', message: 'Could not sign in as guest.', actionLabel: 'OK'));
+      debugPrint('AuthProvider.signInAnonymously exception: $e');
+      if (e is FirebaseAuthException && (e.code == 'operation-not-allowed' || e.code == 'admin-restricted-operation')) {
+         await _signInGuestOffline();
+         return;
+      }
+      _setError(ErrorHandler.map(e));
     } finally {
       _isBusy = false;
       notifyListeners();
@@ -213,7 +191,7 @@ class AuthProvider extends ChangeNotifier {
     final uid = existing ?? 'guest_local_${DateTime.now().millisecondsSinceEpoch}';
     await prefs.setString(_guestUidKey, uid);
     await prefs.setBool('remember_me', true);
-    _user = UserProfile(uid: uid, email: '', name: 'Guest Player');
+    _user = UserProfile(uid: uid, email: '', name: 'Guest Player', avatarEmoji: '🙂', isAnonymous: true);
     _isBusy = false;
     notifyListeners();
   }
@@ -252,7 +230,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       // Update locally first so UI feels instant
       if (_user != null) {
-        _user = UserProfile(uid: _user!.uid, email: _user!.email, name: name);
+        _user = UserProfile(uid: _user!.uid, email: _user!.email, name: name, avatarEmoji: _user!.avatarEmoji, isAnonymous: _user!.isAnonymous);
         notifyListeners();
       }
 
@@ -263,6 +241,24 @@ class AuthProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('AuthProvider.updateDisplayName error: $e');
+    }
+  }
+
+  Future<void> updateAvatar(String emoji) async {
+    try {
+      // Update locally first so UI feels instant
+      if (_user != null) {
+        _user = UserProfile(uid: _user!.uid, email: _user!.email, name: _user!.name, avatarEmoji: emoji, isAnonymous: _user!.isAnonymous);
+        notifyListeners();
+      }
+
+      if (!_ensureFirebaseReady()) return;
+      final current = _firebaseAuth.currentUser;
+      if (current != null) {
+        await current.updatePhotoURL(emoji);
+      }
+    } catch (e) {
+      debugPrint('AuthProvider.updateAvatar error: $e');
     }
   }
 

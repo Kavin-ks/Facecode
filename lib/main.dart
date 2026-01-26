@@ -7,8 +7,12 @@ import 'package:facecode/providers/game_provider.dart';
 import 'package:facecode/providers/auth_provider.dart';
 import 'package:facecode/providers/progress_provider.dart';
 import 'package:facecode/providers/user_preferences_provider.dart';
+import 'package:facecode/providers/settings_provider.dart'; // Added
 import 'package:facecode/providers/two_truths_provider.dart';
 import 'package:facecode/providers/truth_dare_provider.dart';
+import 'package:facecode/providers/shop_provider.dart';
+import 'package:facecode/providers/elite_provider.dart';
+import 'package:facecode/providers/analytics_provider.dart';
 import 'package:facecode/screens/splash_screen.dart';
 import 'package:facecode/screens/main_shell.dart';
 import 'package:facecode/screens/mode_selection_screen.dart';
@@ -18,14 +22,26 @@ import 'package:facecode/screens/badges_screen.dart';
 import 'package:facecode/screens/games/truth_dare_screen.dart';
 import 'package:facecode/screens/games/would_rather_screen.dart';
 import 'package:facecode/screens/games/reaction_time_screen.dart';
-import 'package:facecode/screens/games/draw_guess_screen.dart';
+import 'package:facecode/screens/games/draw_guess_screen_v2.dart';
 import 'package:facecode/screens/games/memory_cards_screen.dart';
 import 'package:facecode/screens/games/simon_says_screen.dart';
 import 'package:facecode/screens/games/tic_tac_toe_screen.dart';
 import 'package:facecode/screens/games/fastest_finger_screen.dart';
 import 'package:facecode/screens/games/two_truths_screen.dart';
+import 'package:facecode/models/cosmetic_item.dart';
 import 'package:facecode/utils/theme.dart';
-import 'package:facecode/utils/constants.dart';
+import 'package:facecode/screens/landing_screen.dart';
+import 'package:facecode/screens/public_games_screen.dart';
+import 'package:facecode/screens/login_screen.dart';
+import 'package:facecode/screens/auth_gate_screen.dart';
+import 'package:facecode/screens/settings_screen.dart';
+import 'package:facecode/screens/shop/cosmetic_shop_screen.dart';
+import 'package:facecode/screens/elite/elite_landing_screen.dart';
+import 'package:facecode/services/sound_navigation_observer.dart';
+import 'package:facecode/services/error_handler_service.dart';
+import 'package:facecode/services/network_connectivity_service.dart';
+import 'package:facecode/widgets/error_boundary.dart';
+import 'package:facecode/widgets/network_status_banner.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,6 +64,12 @@ Future<void> main() async {
   } catch (_) {
     // If Firebase isn't configured, app will still run but auth will show an error.
   }
+
+  // Initialize global error handling
+  ErrorHandlerService.initialize();
+
+  // Initialize network connectivity monitoring
+  await NetworkConnectivityService().initialize();
 
   runApp(const FaceCodeApp());
 }
@@ -100,58 +122,131 @@ class _FaceCodeAppState extends State<FaceCodeApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(
           create: (_) => ProgressProvider()..initialize(),
         ),
+        ChangeNotifierProxyProvider<ProgressProvider, ShopProvider>(
+          create: (context) => ShopProvider(context.read<ProgressProvider>()),
+          update: (context, progress, previous) => ShopProvider(progress),
+        ),
+        ChangeNotifierProxyProvider<ProgressProvider, EliteProvider>(
+          create: (context) => EliteProvider(context.read<ProgressProvider>()),
+          update: (context, progress, previous) => EliteProvider(progress),
+        ),
         ChangeNotifierProvider(create: (_) => UserPreferencesProvider()),
+        ChangeNotifierProvider(create: (_) => SettingsProvider()), // Added
+        ChangeNotifierProvider(create: (_) => AnalyticsProvider()),
+        ChangeNotifierProvider(create: (_) => NetworkConnectivityService()),
       ],
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        builder: (context, widget) {
-          // Custom error widget
-          ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
-             return Scaffold(
-               backgroundColor: AppConstants.backgroundColor,
-               body: Center(
-                 child: Padding(
-                   padding: const EdgeInsets.all(20),
-                   child: Column(
-                     mainAxisSize: MainAxisSize.min,
-                     children: [
-                        Icon(Icons.error_outline, color: AppConstants.errorColor, size: 48),
-                        const SizedBox(height: 16),
-                        const Text("Something went wrong", style: TextStyle(color: Colors.white, fontSize: 18)),
-                        const SizedBox(height: 8),
-                         Text(errorDetails.exceptionAsString(), 
-                          style: TextStyle(color: AppConstants.textSecondary, fontSize: 12),
-                          textAlign: TextAlign.center,
-                          maxLines: 3,
-                        ),
-                     ],
-                   ),
-                 ),
-               ),
-             );
-          };
-          return widget!;
-        },
-        title: 'FaceCode',
-        theme: AppTheme.darkTheme,
-        home: const SplashScreen(),
-        routes: {
-          '/game-hub': (context) => const MainShell(),
-          '/profile': (context) => const ProfileScreen(),
-          '/leaderboard': (context) => const LeaderboardScreen(),
-          '/badges': (context) => const BadgesScreen(),
-          '/mode-selection': (context) => const ModeSelectionScreen(),
-          '/truth-dare': (context) => const TruthDareScreen(),
-          '/would-rather': (context) => const WouldYouRatherScreen(),
-          '/reaction-time': (context) => const ReactionTimeScreen(),
-          '/draw-guess': (context) => const DrawGuessScreen(),
-          '/memory-cards': (context) => const MemoryCardsScreen(),
-          '/simon-says': (context) => const SimonSaysScreen(),
-          '/tic-tac-toe': (context) => const TicTacToeScreen(),
-          '/fastest-finger': (context) => const FastestFingerScreen(),
-          '/two-truths': (context) => const TwoTruthsScreen(),
-        },
+      // We use a Builder to access the SettingsProvider from the context below MultiProvider
+      child: Builder(
+        builder: (context) {
+          final settings = context.watch<SettingsProvider>();
+          final progress = context.watch<ProgressProvider>().progress;
+          
+          // Determine cosmetic palette
+          Map<String, Color>? cosmeticPalette;
+          AppThemeMode modeToUse = settings.themeMode;
 
+          final equippedThemeId = progress.equippedItems[CosmeticType.theme.name];
+          if (equippedThemeId != null) {
+            final themeItem = CosmeticItem.allItems.firstWhere((i) => i.id == equippedThemeId);
+            if (themeItem.metadata != null) {
+              cosmeticPalette = Map<String, Color>.from(themeItem.metadata!);
+              modeToUse = AppThemeMode.cosmetic;
+            }
+          }
+
+          // Apply equipped Sound Pack
+          final equippedSoundPackId = progress.equippedItems[CosmeticType.soundPack.name];
+          // We call this in build which is a bit unconventional but common for global side effects in Flutter
+          // when reacting to state changes that affect non-UI services.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            settings.setSoundPack(equippedSoundPackId);
+          });
+
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            // Dynamic Theme
+            theme: AppTheme.getTheme(
+              modeToUse, 
+              accentColor: settings.accentColor,
+              customPalette: cosmeticPalette,
+            ),
+            navigatorObservers: [SoundNavigationObserver()],
+            
+            builder: (context, widget) {
+              // Wrap entire app in error boundary and network status banner
+              return Stack(
+                children: [
+                  ErrorBoundary(
+                    context: 'App Root',
+                    child: widget ?? const SizedBox.shrink(),
+                  ),
+                  const Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: NetworkStatusBanner(),
+                  ),
+                ],
+              );
+            },
+            title: 'FaceCode',
+            initialRoute: '/splash',
+            routes: {
+              '/splash': (context) => const SplashScreen(),
+              '/': (context) => const LandingScreen(),
+              '/public-games': (context) => const PublicGamesScreen(),
+              '/main': (context) => const MainShell(),
+              '/modes': (context) => const ModeSelectionScreen(),
+              '/settings': (context) => const SettingsScreen(), // Added
+              '/shop': (context) => const CosmeticShopScreen(),
+              '/elite': (context) => const EliteLandingScreen(),
+              
+              // Auth Routes
+              '/login': (context) => const LoginScreen(),
+              
+              // Feature Routes with Route Guards
+              '/profile': (context) {
+                final user = context.read<AuthProvider>().user;
+                if (user == null || user.isAnonymous) return const AuthGateScreen(message: "Sign in to view your profile and stats");
+                return const ProfileScreen();
+              },
+              '/leaderboard': (context) {
+                 final user = context.read<AuthProvider>().user;
+                 if (user == null || user.isAnonymous) return const AuthGateScreen(message: "Sign in to compete on the leaderboard");
+                 return const LeaderboardScreen();
+              },
+              '/badges': (context) {
+                 final user = context.read<AuthProvider>().user;
+                 if (user == null || user.isAnonymous) return const AuthGateScreen(message: "Sign in to earn and view badges");
+                 return const BadgesScreen();
+              },
+
+              // Game Routes
+              '/game-truth-dare': (context) => const TruthDareScreen(),
+              '/game-would-rather': (context) => const WouldYouRatherScreen(),
+              '/game-reaction': (context) => const ReactionTimeScreen(),
+              '/game-draw-guess': (context) => const DrawGuessScreen(),
+              '/game-memory': (context) => const MemoryCardsScreen(),
+              '/game-simon': (context) => const SimonSaysScreen(),
+              '/game-tictactoe': (context) => const TicTacToeScreen(),
+              '/game-fastest': (context) => const FastestFingerScreen(),
+              '/game-two-truths': (context) => const TwoTruthsScreen(),
+
+              // Legacy/catalog route aliases (used by GameCatalog.game.route)
+              '/mode-selection': (context) => const ModeSelectionScreen(),
+              '/truth-dare': (context) => const TruthDareScreen(),
+              '/would-rather': (context) => const WouldYouRatherScreen(),
+              '/two-truths': (context) => const TwoTruthsScreen(),
+              '/reaction-time': (context) => const ReactionTimeScreen(),
+              '/fastest-finger': (context) => const FastestFingerScreen(),
+              '/memory-cards': (context) => const MemoryCardsScreen(),
+              '/simon-says': (context) => const SimonSaysScreen(),
+              '/tic-tac-toe': (context) => const TicTacToeScreen(),
+              '/draw-guess': (context) => const DrawGuessScreen(),
+
+            },
+          );
+        }
       ),
     );
   }

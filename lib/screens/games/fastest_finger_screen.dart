@@ -8,6 +8,7 @@ import 'package:facecode/screens/games/common/game_base_screen.dart';
 import 'package:facecode/screens/games/common/game_result_screen.dart';
 import 'package:facecode/utils/game_catalog.dart';
 import 'package:facecode/services/game_feedback_service.dart';
+import 'package:facecode/providers/analytics_provider.dart';
 import 'package:facecode/widgets/premium_ui.dart';
 import 'package:facecode/providers/progress_provider.dart';
 
@@ -109,6 +110,14 @@ class _FastestFingerScreenState extends State<FastestFingerScreen> with TickerPr
   double? _bestReactionMs;
   List<double> _topTimes = [];
 
+  // UI/Locking & feedback
+  bool _lockedP1 = false;
+  bool _lockedP2 = false;
+  Color? _flashColor; // used for green/red flash on question card
+  bool _showGo = false; // show 'GO' briefly after countdown
+
+
+
   Timer? _countdownTimer;
   Timer? _tickTimer;
   Timer? _aiTimer;
@@ -172,8 +181,18 @@ class _FastestFingerScreenState extends State<FastestFingerScreen> with TickerPr
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
       if (_countdownRemaining <= 1) {
+        // Show GO briefly then start question
+        GameFeedbackService.tick();
+        setState(() {
+          _countdownRemaining = 0;
+          _showGo = true;
+        });
         timer.cancel();
-        _startQuestion();
+        Future.delayed(const Duration(milliseconds: 550), () {
+          if (!mounted) return;
+          setState(() => _showGo = false);
+          _startQuestion();
+        });
         return;
       }
       GameFeedbackService.tick();
@@ -291,11 +310,29 @@ class _FastestFingerScreenState extends State<FastestFingerScreen> with TickerPr
         final streakBonus = min(_streak * 5, 40);
         _score += _difficulty.baseScore + timeBonus + streakBonus;
         _saveTime(elapsed);
-        _feedbackMessage = 'Correct • ${elapsed.toStringAsFixed(0)} ms';
+
+        // Percentile compared to stored top times + this time
+        final combined = [..._topTimes, elapsed]..sort();
+        final idx = combined.indexOf(elapsed);
+        final percentile = ((1 - (idx / combined.length)) * 100).clamp(0.0, 100.0);
+        // percentile variable used below for feedback message
+
+        _feedbackMessage = percentile >= 99
+            ? 'New record! ${elapsed.toStringAsFixed(0)} ms'
+            : 'Correct • ${elapsed.toStringAsFixed(0)} ms • Faster than ${percentile.round()}%';
+
+        _flashColor = Colors.green.withValues(alpha: 0.25);
       } else {
+        // Wrong: lock player briefly and show red flash + shake
         GameFeedbackService.error();
         _streak = 0;
         _feedbackMessage = 'Wrong Answer';
+        _lockedP1 = true;
+        _flashColor = Colors.red.withValues(alpha: 0.28);
+        Timer(const Duration(milliseconds: 1000), () {
+          if (!mounted) return;
+          setState(() => _lockedP1 = false);
+        });
       }
     } else {
       if (correct) {
@@ -304,25 +341,33 @@ class _FastestFingerScreenState extends State<FastestFingerScreen> with TickerPr
       } else {
         GameFeedbackService.success();
         _feedbackMessage = _versusMode ? 'Player 2 missed' : 'AI missed';
+        if (_versusMode) {
+          // Lock player 2 briefly on a wrong tap
+          _lockedP2 = true;
+          _flashColor = Colors.red.withValues(alpha: 0.28);
+          Timer(const Duration(milliseconds: 1000), () {
+            if (!mounted) return;
+            setState(() => _lockedP2 = false);
+          });
+        }
       }
     }
 
     setState(() {
       _stage = _FastestFingerStage.feedback;
     });
+
+    // Clear flash after brief time so UI resets
+    Timer(const Duration(milliseconds: 600), () {
+      if (!mounted) return;
+      setState(() => _flashColor = null);
+    });
+
     _nextRoundAfterDelay();
   }
 
-  void _nextRoundAfterDelay() {
-    Future.delayed(const Duration(milliseconds: 900), () {
-      if (!mounted) return;
-      _roundIndex++;
-      if (_roundIndex >= _totalRounds) {
-        _finishGame();
-      } else {
-        _startCountdown();
-      }
-    });
+  int _calculateXP() {
+    return max(20, min(300, _score ~/ 1));
   }
 
   void _finishGame() {
@@ -330,20 +375,30 @@ class _FastestFingerScreenState extends State<FastestFingerScreen> with TickerPr
       _stage = _FastestFingerStage.finished;
     });
     final gameInfo = GameCatalog.allGames.firstWhere((g) => g.id == 'fastest_finger', orElse: () => GameCatalog.allGames[0]);
-    final win = _correctCount >= 3;
-    final message = win
+    final isWinner = _correctCount >= 3;
+    final message = isWinner
       ? 'Great reflexes! $_correctCount/$_totalRounds correct'
       : 'Keep practicing! $_correctCount/$_totalRounds correct';
 
     if (!mounted) return;
+
+    context.read<ProgressProvider>().recordGameResult(
+      gameId: 'game-fastest-finger',
+      won: isWinner,
+      xpAward: _calculateXP(),
+      analytics: context.read<AnalyticsProvider>(),
+    );
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => GameResultScreen(
           gameInfo: gameInfo,
           score: _score,
-          isWin: win,
+          isWin: isWinner,
+          onReplay: () {
+            Navigator.of(context).pop();
+          },
           customMessage: message,
-          onReplay: () => Navigator.of(context).pushReplacementNamed('/fastest-finger'),
+          // onHome and onReplay will be handled by GameOutcomeActions inside GameResultScreen
         ),
       ),
     );
@@ -608,18 +663,31 @@ class _FastestFingerScreenState extends State<FastestFingerScreen> with TickerPr
           ),
         ),
         const SizedBox(height: 12),
-        GlassCard(
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            color: _flashColor ?? AppConstants.surfaceColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white12),
+          ),
           child: SizedBox(
             height: 160,
             child: Center(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
                 child: _stage == _FastestFingerStage.countdown
-                    ? Text(
-                        '$_countdownRemaining',
-                        key: ValueKey('countdown_$_countdownRemaining'),
-                        style: const TextStyle(color: Colors.white, fontSize: 56, fontWeight: FontWeight.bold),
-                      )
+                    ? (_showGo
+                        ? Text(
+                            'GO',
+                            key: const ValueKey('go'),
+                            style: TextStyle(color: AppConstants.primaryColor, fontSize: 56, fontWeight: FontWeight.bold),
+                          )
+                        : Text(
+                            '$_countdownRemaining',
+                            key: ValueKey('countdown_$_countdownRemaining'),
+                            style: const TextStyle(color: Colors.white, fontSize: 56, fontWeight: FontWeight.bold),
+                          ))
                     : _stage == _FastestFingerStage.feedback
                         ? Text(
                             _feedbackMessage,
@@ -708,8 +776,9 @@ class _FastestFingerScreenState extends State<FastestFingerScreen> with TickerPr
   }
 
   Widget _buildAnswerButton(int option, bool selected, int player, Color color) {
+    final isLocked = player == 1 ? _lockedP1 : _lockedP2;
     return ElevatedButton(
-      onPressed: _stage == _FastestFingerStage.question
+      onPressed: (_stage == _FastestFingerStage.question && !isLocked)
           ? () => _handleAnswer(player: player, answer: option)
           : null,
       style: ElevatedButton.styleFrom(
@@ -720,5 +789,14 @@ class _FastestFingerScreenState extends State<FastestFingerScreen> with TickerPr
       ),
       child: Text(option.toString(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
     );
+  }
+
+  void _nextRoundAfterDelay() {
+    _roundIndex++;
+    if (_roundIndex >= _totalRounds) {
+      Timer(const Duration(milliseconds: 1500), _finishGame);
+    } else {
+      Timer(const Duration(milliseconds: 1500), _startCountdown);
+    }
   }
 }

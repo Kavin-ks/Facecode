@@ -1,313 +1,567 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:facecode/utils/constants.dart';
+import 'package:facecode/widgets/ui_kit.dart';
 import 'package:facecode/providers/progress_provider.dart';
-import 'package:facecode/models/user_progress.dart';
-import 'package:facecode/widgets/premium_ui.dart';
+import 'package:facecode/providers/auth_provider.dart';
+import 'package:facecode/providers/leaderboard_provider.dart';
+import 'package:facecode/models/leaderboard_entry.dart';
+import 'package:facecode/screens/public_profile_screen.dart';
+import 'package:facecode/routing/app_route.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
-/// Modern Leaderboard Screen matching Play Store game hub style
-class LeaderboardScreen extends StatefulWidget {
+class LeaderboardScreen extends StatelessWidget {
   const LeaderboardScreen({super.key});
 
   @override
-  State<LeaderboardScreen> createState() => _LeaderboardScreenState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider(
+      create: (_) => LeaderboardProvider(),
+      child: const _LeaderboardContent(),
+    );
+  }
 }
 
-class _LeaderboardScreenState extends State<LeaderboardScreen> {
-  int _selectedTab = 0;
-  final List<String> _tabs = ['Weekly', 'All Time'];
+class _LeaderboardContent extends StatefulWidget {
+  const _LeaderboardContent();
+
+  @override
+  State<_LeaderboardContent> createState() => _LeaderboardContentState();
+}
+
+class _LeaderboardContentState extends State<_LeaderboardContent> {
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  void _loadData() {
+    final progress = context.read<ProgressProvider>().progress;
+    final auth = context.read<AuthProvider>();
+    final userName = auth.user?.displayName ?? "Player";
+    
+    // Default load
+    context.read<LeaderboardProvider>().loadLeaderboard(
+      LeaderboardType.weekly,
+      progress,
+      userName: userName,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<LeaderboardProvider>();
     final progress = context.watch<ProgressProvider>().progress;
-    final totalXp = _totalXp(progress);
-    final tiers = _buildTiers(totalXp);
+    final auth = context.read<AuthProvider>();
 
     return Scaffold(
       backgroundColor: AppConstants.backgroundColor,
       body: SafeArea(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
+            _buildHeader(context),
+            
+            // Tabs
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: () => Navigator.of(context).maybePop(),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Leaderboard',
-                        style: Theme.of(context).textTheme.headlineMedium,
-                      ),
-                    ],
-                  ),
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppConstants.surfaceColor,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.search_rounded,
-                      color: AppConstants.textSecondary,
-                      size: 22,
-                    ),
-                  ),
-                ],
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: _buildTabs(provider, progress, auth.user?.displayName ?? "Player"),
             ),
 
-            // Your Rank Card
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: _buildYourRankCard(totalXp, progress.level),
-            ),
-
-            // Tab Chips
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-              child: Row(
-                children: List.generate(_tabs.length, (index) {
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: _buildTabChip(index, _tabs[index]),
-                  );
-                }),
-              ),
-            ),
-
-            // Season Ladder
+            // Content
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                itemCount: tiers.length,
-                itemBuilder: (context, index) {
-                  final tier = tiers[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _buildTierCard(tier),
-                  );
-                },
-              ),
+              child: provider.isLoading 
+                  ? _buildSkeletonLoader()
+                  : _buildLeaderboardList(provider.entries),
             ),
+            
+            // Sticky User Footer
+            if (!provider.isLoading && provider.entries.any((e) => e.isUser))
+              _buildStickyFooter(provider.entries.firstWhere((e) => e.isUser)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildYourRankCard(int totalXp, int level) {
-    return GlassCard(
-      radius: 16,
+  Widget _buildHeader(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Rank badge
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: AppConstants.primaryColor.withAlpha(40),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Center(
-              child: Text(
-                'Lv $level',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
+          Row(
+            children: [
+              PremiumIconButton(
+                icon: Icons.arrow_back,
+                color: Colors.white,
+                onPressed: () => Navigator.of(context).maybePop(),
               ),
-            ),
+              const SizedBox(width: 4),
+              Text(
+                'Leaderboard',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+            ],
           ),
-          const SizedBox(width: 14),
-          // Info
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Season Ladder',
-                  style: TextStyle(
-                    color: AppConstants.textSecondary,
-                    fontSize: 13,
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Your current tier',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // XP
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: AppConstants.accentGold.withAlpha(20),
+              color: AppConstants.primaryColor.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppConstants.primaryColor.withValues(alpha: 0.5)),
             ),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.star_rounded,
-                  color: AppConstants.accentGold,
-                  size: 16,
-                ),
+                const Icon(Icons.emoji_events, color: AppConstants.accentGold, size: 16),
                 const SizedBox(width: 4),
                 Text(
-                  '${_formatXp(totalXp)} XP',
-                  style: const TextStyle(
+                  "Season 1",
+                  style: TextStyle(
                     color: AppConstants.accentGold,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabChip(int index, String label) {
-    final isSelected = _selectedTab == index;
-    
-    return GestureDetector(
-      onTap: () => setState(() => _selectedTab = index),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? AppConstants.primaryColor : AppConstants.surfaceColor,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? AppConstants.primaryColor : AppConstants.borderColor,
-            width: 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.white : AppConstants.textSecondary,
-            fontSize: 14,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTierCard(Map<String, dynamic> tier) {
-    final isActive = tier['isActive'] as bool;
-    return GlassCard(
-      radius: 14,
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: (tier['color'] as Color).withAlpha(30),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: (tier['color'] as Color).withAlpha(60)),
-            ),
-            child: Center(
-              child: Text(tier['icon'] as String, style: const TextStyle(fontSize: 18)),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  tier['name'] as String,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  tier['range'] as String,
-                  style: TextStyle(
-                    color: AppConstants.textMuted,
+                    fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
                 ),
               ],
             ),
           ),
-          if (isActive)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppConstants.accentGold.withAlpha(25),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Text(
-                'Current',
-                style: TextStyle(color: AppConstants.accentGold, fontWeight: FontWeight.w700, fontSize: 12),
-              ),
-            ),
         ],
       ),
     );
   }
 
-  String _formatXp(int xp) {
-    if (xp >= 1000) {
-      return '${(xp / 1000).toStringAsFixed(1)}K';
-    }
-    return xp.toString();
+  Widget _buildTabs(LeaderboardProvider provider, dynamic progress, String userName) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppConstants.surfaceColor,
+        borderRadius: BorderRadius.circular(50),
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        children: [
+          _buidTabItem(provider, "Daily", LeaderboardType.daily, progress, userName),
+          _buidTabItem(provider, "Weekly", LeaderboardType.weekly, progress, userName),
+          _buidTabItem(provider, "All Time", LeaderboardType.allTime, progress, userName),
+        ],
+      ),
+    );
   }
 
-  int _totalXp(UserProgress progress) {
-    int total = 0;
-    for (int level = 1; level < progress.level; level++) {
-      total += UserProgress.xpForLevel(level);
-    }
-    total += progress.currentXP;
-    return total;
+  Widget _buidTabItem(LeaderboardProvider provider, String label, LeaderboardType type, dynamic progress, String userName) {
+    final isSelected = provider.currentType == type;
+    return Expanded(
+      child: PremiumTap(
+        onTap: () => provider.loadLeaderboard(type, progress, userName: userName),
+        child: AnimatedContainer(
+          duration: 200.ms,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? AppConstants.primaryColor : Colors.transparent,
+            borderRadius: BorderRadius.circular(40),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? Colors.white : AppConstants.textMuted,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
-  List<Map<String, dynamic>> _buildTiers(int totalXp) {
-    final tiers = [
-      {'name': 'Bronze', 'min': 0, 'max': 1000, 'icon': '🥉', 'color': const Color(0xFFCD7F32)},
-      {'name': 'Silver', 'min': 1000, 'max': 2500, 'icon': '🥈', 'color': const Color(0xFFC0C0C0)},
-      {'name': 'Gold', 'min': 2500, 'max': 5000, 'icon': '🥇', 'color': AppConstants.accentGold},
-      {'name': 'Platinum', 'min': 5000, 'max': 10000, 'icon': '💎', 'color': AppConstants.cardBlue},
-      {'name': 'Diamond', 'min': 10000, 'max': 20000, 'icon': '👑', 'color': AppConstants.cardPurple},
-    ];
+  Widget _buildLeaderboardList(List<LeaderboardEntry> entries) {
+    if (entries.isEmpty) return const SizedBox();
 
-    return tiers.map((tier) {
-      final min = tier['min'] as int;
-      final max = tier['max'] as int;
-      final active = totalXp >= min && totalXp < max;
-      return {
-        'name': tier['name'],
-        'range': '${_formatXp(min)} - ${_formatXp(max)} XP',
-        'icon': tier['icon'],
-        'color': tier['color'],
-        'isActive': active,
-      };
-    }).toList();
+    final top3 = entries.take(3).toList();
+    final rest = entries.skip(3).toList();
+
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        // Podium
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: SizedBox(
+            height: 220,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (top3.length > 1) _buildPodiumPlace(top3[1], 2), // 2nd
+                if (top3.isNotEmpty) _buildPodiumPlace(top3[0], 1), // 1st
+                if (top3.length > 2) _buildPodiumPlace(top3[2], 3), // 3rd
+              ],
+            ),
+          ),
+        ),
+
+        // List
+        Container(
+          decoration: BoxDecoration(
+            color: AppConstants.surfaceColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 20, offset: const Offset(0, -5)),
+            ],
+          ),
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: rest.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              return _buildRankItem(rest[index]);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPodiumPlace(LeaderboardEntry entry, int place) {
+    // 1st place is bigger
+    final isFirst = place == 1;
+    final size = isFirst ? 100.0 : 80.0;
+    final heightDifference = isFirst ? 40.0 : 0.0;
+    final color = place == 1 ? AppConstants.accentGold : (place == 2 ? const Color(0xFFC0C0C0) : const Color(0xFFCD7F32));
+
+    return Expanded(
+      child: PremiumTap(
+        onTap: () {
+          Navigator.of(context).push(
+            AppRoute.fadeSlide(PublicProfileScreen(entry: entry)),
+          );
+        },
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+          // Crown for 1st
+          if (isFirst) 
+             const Icon(Icons.star, color: AppConstants.accentGold, size: 24)
+                 .animate(onPlay: (c) => c.repeat(reverse: true)).moveY(begin: 0, end: -5, duration: 1.seconds),
+          
+          const SizedBox(height: 8),
+
+          // Avatar
+          Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: color, width: 3),
+              boxShadow: [
+                BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 15),
+              ],
+              color: AppConstants.surfaceLight,
+            ),
+            child: Center(
+              child: Text(entry.avatar, style: TextStyle(fontSize: size * 0.4)),
+            ),
+          ).animate().scale(delay: (place * 200).ms, duration: 600.ms, curve: Curves.elasticOut),
+
+          const SizedBox(height: 12),
+
+          Text(
+            entry.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: entry.isUser ? AppConstants.primaryColor : Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: isFirst ? 14 : 12,
+            ),
+          ),
+          
+          Text(
+            "${entry.score}",
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: isFirst ? 16 : 14,
+            ),
+          ),
+
+          const SizedBox(height: 12),
+          
+          // Podium Bar
+          Container(
+            height: 60 + heightDifference,
+            width: double.infinity,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  color.withValues(alpha: 0.3),
+                  color.withValues(alpha: 0.05),
+                ],
+              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              border: Border(top: BorderSide(color: color, width: 1)),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              "$place",
+              style: TextStyle(
+                color: color,
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ).animate().slideY(begin: 1, end: 0, delay: (place * 100).ms, duration: 500.ms, curve: Curves.easeOutBack),
+        ],
+      ),
+      ),
+    );
+  }
+
+  Widget _buildRankItem(LeaderboardEntry entry) {
+    return PremiumTap(
+      onTap: () {
+        Navigator.of(context).push(
+          AppRoute.fadeSlide(PublicProfileScreen(entry: entry)),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: entry.isUser ? AppConstants.primaryColor.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: entry.isUser ? AppConstants.primaryColor.withValues(alpha: 0.5) : Colors.transparent,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Rank
+          SizedBox(
+            width: 30,
+            child: Text(
+              "#${entry.rank}",
+              style: const TextStyle(
+                color: AppConstants.textSecondary,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          
+          const SizedBox(width: 12),
+
+          // Avatar
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppConstants.surfaceLight,
+              shape: BoxShape.circle,
+            ),
+            child: Center(child: Text(entry.avatar, style: const TextStyle(fontSize: 20))),
+          ),
+
+          const SizedBox(width: 16),
+
+          // Name and Stats
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.name,
+                  style: TextStyle(
+                    color: entry.isUser ? Colors.white : AppConstants.textPrimary,
+                    fontWeight: entry.isUser ? FontWeight.bold : FontWeight.w600,
+                  ),
+                ),
+                if (entry.rankTitle != null)
+                  Row(
+                    children: [
+                      Text(
+                        entry.rankTitle!.toUpperCase(),
+                        style: TextStyle(
+                          color: entry.rankColor ?? AppConstants.textMuted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      // Today's Best Icon
+                      if (entry.isDailyBest)
+                         const Padding(
+                           padding: EdgeInsets.only(left: 4.0),
+                           child: Icon(Icons.emoji_events_rounded, color: AppConstants.accentGold, size: 10),
+                         ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+
+          // Score
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                "${entry.score}",
+                style: const TextStyle(
+                  color: AppConstants.accentGold,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const Text(
+                "XP",
+                style: TextStyle(
+                  color: AppConstants.textMuted,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+    ).animate().fadeIn(duration: 300.ms).slideX(begin: 0.1, end: 0);
+  }
+
+  Widget _buildSkeletonLoader() {
+    return ListView(
+      padding: EdgeInsets.zero,
+      physics: const NeverScrollableScrollPhysics(),
+      children: [
+        // Podium Skeleton
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: SizedBox(
+            height: 220,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [ const SkeletonBase(width: 80, height: 80, radius: 40), const SizedBox(height: 12), const SkeletonBase(width: 60, height: 12), const SizedBox(height: 12), Container(height: 60, color: Colors.white.withValues(alpha: 0.05)) ])),
+                Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [ const SkeletonBase(width: 100, height: 100, radius: 50), const SizedBox(height: 12), const SkeletonBase(width: 80, height: 14), const SizedBox(height: 12), Container(height: 100, color: Colors.white.withValues(alpha: 0.05)) ])),
+                Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [ const SkeletonBase(width: 80, height: 80, radius: 40), const SizedBox(height: 12), const SkeletonBase(width: 60, height: 12), const SizedBox(height: 12), Container(height: 60, color: Colors.white.withValues(alpha: 0.05)) ])),
+              ],
+            ),
+          ),
+        ),
+
+        // List Skeleton
+        Container(
+          decoration: BoxDecoration(
+            color: AppConstants.surfaceColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+          ),
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: 8,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (_, __) => const SkeletonListItem(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStickyFooter(LeaderboardEntry userEntry) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppConstants.surfaceColor,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 20,
+            offset: const Offset(0, -5),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            // User Avatar
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: AppConstants.primaryColor,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: Center(
+                child: Text(
+                  userEntry.avatar,
+                  style: const TextStyle(fontSize: 24),
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "You",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  if (userEntry.rankTitle != null)
+                    Text(
+                      userEntry.rankTitle!.toUpperCase(),
+                      style: TextStyle(
+                        color: userEntry.rankColor ?? AppConstants.textMuted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                   Text(
+                    "#${userEntry.rank} in leaderboard",
+                    style: const TextStyle(
+                      color: AppConstants.textMuted,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  "${userEntry.score}",
+                  style: const TextStyle(
+                    color: AppConstants.accentGold,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 20,
+                  ),
+                ),
+                const Text(
+                  "XP",
+                  style: TextStyle(
+                    color: AppConstants.textMuted,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ).animate().slideY(begin: 1, end: 0, duration: 400.ms, curve: Curves.easeOutBack);
   }
 }

@@ -7,6 +7,7 @@ import 'package:facecode/providers/user_preferences_provider.dart';
 import 'package:facecode/providers/auth_provider.dart';
 import 'package:facecode/models/game_metadata.dart';
 import 'package:facecode/widgets/game_card_modern.dart';
+import 'package:facecode/widgets/ui_kit.dart';
 import 'package:facecode/widgets/premium_ui.dart';
 
 /// Modern Home Screen matching Play Store game hub style
@@ -97,23 +98,40 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
                 ),
               ),
               Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  itemCount: _filteredGames.length,
-                  itemBuilder: (context, index) {
-                    final game = _filteredGames[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: GameCardModern(
-                        game: game,
-                        onTap: () {
-                          context.read<UserPreferencesProvider>().addToRecentlyPlayed(game.id);
-                          Navigator.pushNamed(context, game.route);
+                child: _filteredGames.isEmpty
+                    ? EmptyStateWidget(
+                        icon: Icons.search_off_rounded,
+                        title: "No games found!",
+                        subtitle: "Try searching for something else.",
+                        actionLabel: "Clear Search",
+                        onAction: () {
+                          setState(() {
+                            _selectedCategory = 'All';
+                            // Reset search if we had a controller, but for now just resetting category works as "Show All" equivalent logic if search bar clears too.
+                            // Assuming filter logic handles clearing. For now simple category reset.
+                          });
+                        },
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                        itemCount: _filteredGames.length,
+                        itemBuilder: (context, index) {
+                          final game = _filteredGames[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: KeepAliveWrapper(
+                              child: GameCardModern(
+                                game: game,
+                                index: index,
+                                onTap: () {
+                                  context.read<UserPreferencesProvider>().addToRecentlyPlayed(game.id);
+                                  Navigator.pushNamed(context, game.route);
+                                },
+                              ),
+                            ),
+                          );
                         },
                       ),
-                    );
-                  },
-                ),
               ),
             ],
           ),
@@ -353,6 +371,15 @@ class _HomeScreenNewState extends State<HomeScreenNew> {
           color: isSelected ? AppConstants.primaryColor.withAlpha(40) : Colors.white.withAlpha(8),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: isSelected ? AppConstants.primaryColor : Colors.white.withAlpha(20)),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppConstants.primaryColor.withAlpha(60),
+                    blurRadius: 12,
+                    spreadRadius: 1,
+                  )
+                ]
+              : [],
         ),
         child: Text(
           label,

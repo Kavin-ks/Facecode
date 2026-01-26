@@ -15,6 +15,8 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _nameController = TextEditingController();
+  final List<String> _avatars = ['🙂', '😀', '😎', '🤖', '👾', '🐱', '🐶', '🦊', '🐻', '🐼', '🐨', '🦄', '🐲', '👻', '🤡', '👽'];
+  String _selectedAvatar = '🙂';
 
   @override
   void initState() {
@@ -23,6 +25,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _nameController.text = user?.name.isNotEmpty == true
         ? user!.name
         : user?.displayName ?? '';
+    _selectedAvatar = user?.avatarEmoji ?? '🙂';
   }
 
   @override
@@ -40,6 +43,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     final auth = context.read<AuthProvider>();
     await auth.updateDisplayName(name);
+    await auth.updateAvatar(_selectedAvatar);
 
     if (!mounted) return;
     Navigator.of(context).pop();
@@ -69,6 +73,35 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text('Choose Avatar', style: TextStyle(color: AppConstants.textSecondary)),
+                     const SizedBox(height: 12),
+                    SizedBox(
+                      height: 50,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _avatars.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 12),
+                        itemBuilder: (context, index) {
+                          final avatar = _avatars[index];
+                          final isSelected = avatar == _selectedAvatar;
+                          return GestureDetector(
+                            onTap: () => setState(() => _selectedAvatar = avatar),
+                            child: Container(
+                              width: 50,
+                              height: 50,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: isSelected ? AppConstants.primaryColor : Colors.white10,
+                                shape: BoxShape.circle,
+                                border: isSelected ? Border.all(color: Colors.white, width: 2) : null,
+                              ),
+                              child: Text(avatar, style: const TextStyle(fontSize: 24)),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                     Text('Display Name', style: TextStyle(color: AppConstants.textSecondary)),
                     const SizedBox(height: 8),
                     Container(

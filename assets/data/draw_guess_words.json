@@ -1,0 +1,32 @@
+{
+  "objects": {
+    "easy": ["cat", "sun", "cup", "car", "tree", "ball", "fish", "hat", "chair", "clock"],
+    "medium": ["airplane", "guitar", "robot", "camera", "telescope", "lamp", "train"],
+    "hard": ["microscope", "skyscraper", "helicopter", "lighthouse", "constellation"]
+  },
+  "animals": {
+    "easy": ["dog", "cat", "fish", "bird", "cow", "duck"],
+    "medium": ["dolphin", "kangaroo", "penguin", "turtle"],
+    "hard": ["hippopotamus", "chameleon", "axolotl", "orangutan"]
+  },
+  "movies": {
+    "easy": ["lion king", "frozen", "up"],
+    "medium": ["toy story", "spider man", "harry potter"],
+    "hard": ["interstellar", "inception", "jurassic park"]
+  },
+  "food": {
+    "easy": ["pizza", "apple", "cake", "bread"],
+    "medium": ["hamburger", "spaghetti", "sushi"],
+    "hard": ["croissant", "risotto", "tiramisu"]
+  },
+  "actions": {
+    "easy": ["run", "jump", "sleep", "dance"],
+    "medium": ["skateboard", "climb", "photograph"],
+    "hard": ["investigate", "negotiate", "improvise"]
+  },
+  "random": {
+    "easy": ["sun", "cat", "pizza", "run"],
+    "medium": ["guitar", "spider man", "skateboard"],
+    "hard": ["microscope", "interstellar", "improvise"]
+  }
+}

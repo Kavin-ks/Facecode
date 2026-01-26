@@ -1,12 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:provider/provider.dart';
-
-import 'package:facecode/providers/auth_provider.dart';
 import 'package:facecode/utils/constants.dart';
-import 'package:facecode/screens/main_shell.dart';
-import 'package:facecode/screens/login_screen.dart';
+import 'package:facecode/screens/landing_screen.dart';
 import 'package:facecode/routing/app_route.dart';
 
 /// Modern splash screen with FaceCode branding
@@ -47,18 +43,9 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   void _navigateNow() {
     _navTimer?.cancel();
     if (!mounted) return;
-    try {
-      final auth = context.read<AuthProvider>();
-      final destination = auth.isSignedIn ? const MainShell() : const LoginScreen();
-      Navigator.of(context).pushReplacement(
-        AppRoute.fadeSlide(destination),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        AppRoute.fadeSlide(const LoginScreen()),
-      );
-    }
+    Navigator.of(context).pushReplacement(
+      AppRoute.fadeSlide(const LandingScreen()),
+    );
   }
 
   @override

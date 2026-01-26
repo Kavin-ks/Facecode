@@ -18,11 +18,13 @@ class GameError {
   final String title;
   final String message;
   final String actionLabel;
+  final String? illustrationAsset; 
 
   const GameError({
     required this.type,
     required this.title,
     required this.message,
     this.actionLabel = 'OK',
+    this.illustrationAsset,
   });
 }

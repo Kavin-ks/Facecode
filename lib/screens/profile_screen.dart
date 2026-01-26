@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:facecode/providers/progress_provider.dart';
+import 'package:facecode/models/badge_data.dart';
+import 'package:facecode/providers/analytics_provider.dart';
 import 'package:facecode/utils/constants.dart';
 import 'package:facecode/providers/auth_provider.dart';
-import 'package:facecode/widgets/premium_ui.dart';
+import 'package:facecode/widgets/ui_kit.dart';
 import 'package:facecode/routing/app_route.dart';
 import 'package:facecode/screens/settings/edit_profile_screen.dart';
 import 'package:facecode/screens/settings/notifications_screen.dart';
@@ -11,6 +14,12 @@ import 'package:facecode/screens/settings/privacy_screen.dart';
 import 'package:facecode/screens/settings/help_support_screen.dart';
 import 'package:facecode/screens/login_screen.dart';
 import 'package:facecode/utils/app_dialogs.dart';
+import 'package:facecode/widgets/premium_ui.dart';
+import 'package:facecode/screens/engagement_dashboard_screen.dart';
+import 'package:facecode/screens/admin/admin_debug_dashboard.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:facecode/widgets/badge_frame.dart';
+import 'package:facecode/models/cosmetic_item.dart';
 
 /// Modern Profile Screen matching Play Store game hub style
 class ProfileScreen extends StatelessWidget {
@@ -21,7 +30,7 @@ class ProfileScreen extends StatelessWidget {
     final progress = context.watch<ProgressProvider>().progress;
     final auth = context.watch<AuthProvider>();
     final userName = auth.user?.displayName ?? 'Player';
-    final userInitial = auth.user?.initial ?? 'P';
+    final userAvatar = auth.user?.avatarEmoji ?? (auth.user?.initial ?? '🙂');
 
     return Scaffold(
       backgroundColor: AppConstants.backgroundColor,
@@ -43,13 +52,28 @@ class ProfileScreen extends StatelessWidget {
                     'Profile',
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
+                  const Spacer(),
+                  PremiumIconButton(
+                    icon: Icons.shopping_bag_outlined,
+                    onPressed: () => Navigator.of(context).pushNamed('/shop'),
+                    tooltip: 'Cosmetic Shop',
+                  ),
+                  const SizedBox(width: 8),
+                  PremiumIconButton(
+                    icon: Icons.share_rounded,
+                    onPressed: () {
+                      // Placeholder for share functionality
+                      AppDialogs.showSnack(context, 'Sharing profile...');
+                    },
+                    tooltip: 'Share Profile',
+                  ),
                 ],
               ),
               
               const SizedBox(height: 24),
               
               // Profile Card
-              _buildProfileCard(context, progress, userName, userInitial),
+              _buildProfileCard(context, progress, userName, userAvatar),
               
               const SizedBox(height: 20),
               
@@ -61,6 +85,16 @@ class ProfileScreen extends StatelessWidget {
               // Stats Grid
               _buildStatsGrid(context, progress),
               
+              const SizedBox(height: 12),
+              
+              // Secondary Stats
+              _buildStatRow(context, progress),
+              
+              const SizedBox(height: 24),
+
+              // Best Games
+              _buildBestGamesList(context, progress),
+
               const SizedBox(height: 24),
 
               // Badges
@@ -88,41 +122,77 @@ class ProfileScreen extends StatelessWidget {
       child: Row(
         children: [
           // Avatar
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppConstants.primaryColor.withAlpha(40),
-                  AppConstants.cardPink.withAlpha(40),
-                ],
+          GestureDetector(
+            onLongPress: () {
+              HapticFeedback.heavyImpact();
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AdminDebugDashboard()),
+              );
+            },
+            child: Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppConstants.primaryColor.withAlpha(40),
+                    AppConstants.cardPink.withAlpha(40),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppConstants.primaryColor.withAlpha(50),
+                  width: 2,
+                ),
               ),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: AppConstants.primaryColor.withAlpha(50),
-                width: 2,
+              child: Center(
+                child: Text(userInitial, style: const TextStyle(fontSize: 32, color: Colors.white, fontWeight: FontWeight.bold)),
               ),
             ),
-            child: Center(
-              child: Text(userInitial, style: const TextStyle(fontSize: 32, color: Colors.white, fontWeight: FontWeight.bold)),
-            ),
-          ),
+          ).animate(onPlay: (c) => c.repeat(reverse: true)).shimmer(duration: 2.seconds, color: Colors.white.withValues(alpha: 0.3)).scaleXY(begin: 1.0, end: 1.05, duration: 2.seconds, curve: Curves.easeInOut),
           const SizedBox(width: 16),
           // Info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  userName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      userName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (progress.activeDailyTitles.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      _buildDailyBestBadge(context),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(
+                      progress.playerRank.icon,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      progress.playerRank.label.toUpperCase(),
+                      style: TextStyle(
+                        color: progress.playerRank.color,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -160,6 +230,13 @@ class ProfileScreen extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (!progress.isElite) ...[
+                  const SizedBox(width: 8),
+                  AddictiveSecondaryButton(
+                    label: 'ELITE',
+                    onTap: () => Navigator.of(context).pushNamed('/elite'),
+                  ),
+                ],
               ],
             ),
           ),
@@ -221,14 +298,7 @@ class ProfileScreen extends StatelessWidget {
   }
 
   Widget _buildBadgesGrid(BuildContext context, dynamic progress) {
-    final badgeDefinitions = [
-      {'id': 'first_win', 'label': 'First Win', 'icon': '🏆'},
-      {'id': 'ten_wins', 'label': '10 Wins', 'icon': '🥇'},
-      {'id': 'rookie_10_games', 'label': '10 Games', 'icon': '🎮'},
-      {'id': 'veteran_50_games', 'label': '50 Games', 'icon': '⭐'},
-      {'id': 'streak_3', 'label': '3-Day Streak', 'icon': '🔥'},
-      {'id': 'streak_10', 'label': '10-Day Streak', 'icon': '💥'},
-    ];
+    const badges = BadgeData.allBadges;
 
     return GlassCard(
       radius: 16,
@@ -245,31 +315,59 @@ class ProfileScreen extends StatelessWidget {
             shrinkWrap: true,
             crossAxisSpacing: 10,
             mainAxisSpacing: 10,
+            childAspectRatio: 0.8,
             physics: const NeverScrollableScrollPhysics(),
-            children: badgeDefinitions.map((badge) {
-              final earned = progress.badges.contains(badge['id']);
+            children: badges.map((badge) {
+              final earned = progress.badges.contains(badge.id);
+              final equippedFrameId = progress.equippedItems[CosmeticType.badgeFrame.name];
+              final equippedFrame = equippedFrameId != null ? CosmeticItem.allItems.firstWhere((i) => i.id == equippedFrameId) : null;
+
               return Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: earned ? Colors.white.withAlpha(12) : Colors.white.withAlpha(4),
+                  color: earned ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.04),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: earned ? AppConstants.accentGold.withAlpha(60) : Colors.white10),
+                  border: Border.all(
+                    color: earned ? badge.color.withValues(alpha: 0.6) : Colors.white10,
+                    width: earned ? 1.5 : 1,
+                  ),
+                  boxShadow: earned ? [
+                    BoxShadow(color: badge.color.withValues(alpha: 0.2), blurRadius: 8),
+                  ] : null,
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(earned ? badge['icon'] as String : '🔒', style: const TextStyle(fontSize: 20)),
-                    const SizedBox(height: 6),
-                    Text(
-                      badge['label'] as String,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: earned ? Colors.white : AppConstants.textMuted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
+                child: Opacity(
+                  opacity: earned ? 1.0 : 0.4,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      BadgeFrame(
+                        frameItem: earned ? equippedFrame : null,
+                        isEarned: earned,
+                        child: Text(badge.icon, style: const TextStyle(fontSize: 32)),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Text(
+                        badge.label,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: earned ? badge.color : AppConstants.textMuted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                       Text(
+                        badge.description,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppConstants.textMuted,
+                          fontSize: 9,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               );
             }).toList(),
@@ -312,6 +410,41 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildStatRow(BuildContext context, dynamic progress) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      decoration: BoxDecoration(
+        color: AppConstants.surfaceColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildStatItem('Best Streak', '${progress.longestStreak}'),
+          Container(height: 40, width: 1, color: Colors.white12),
+          _buildStatItem('Avg Session', '${context.watch<AnalyticsProvider>().averageSessionLengthMinutes.toStringAsFixed(1)}m'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(color: AppConstants.textMuted, fontSize: 10, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
   Widget _buildStatCard(String emoji, String value, String label, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
@@ -349,6 +482,120 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildBestGamesList(BuildContext context, dynamic progress) {
+    // Sort games by wins
+    final winsMap = Map<String, int>.from(progress.gameWins);
+    
+    if (winsMap.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Best Played',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 12),
+          Container(
+             width: double.infinity,
+             padding: const EdgeInsets.all(24),
+             decoration: BoxDecoration(
+               color: AppConstants.surfaceColor,
+               borderRadius: BorderRadius.circular(16),
+               border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+             ),
+             child: Column(
+               children: [
+                 const Icon(Icons.videogame_asset_outlined, color: Colors.white54, size: 32),
+                 const SizedBox(height: 12),
+                 const Text("No history yet", style: TextStyle(color: Colors.white70)),
+                 const SizedBox(height: 12),
+                 AddictiveSecondaryButton(
+                   label: "Start Playing!",
+                   onTap: () => Navigator.of(context).pop(), // Go back to home
+                 ),
+               ],
+             ),
+          ),
+        ],
+      );
+    }
+
+    final sortedEntries = winsMap.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    
+    final topGames = sortedEntries.take(3).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Best Played',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 100,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: topGames.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (context, index) {
+              final entry = topGames[index];
+              final gameId = entry.key;
+              final wins = entry.value;
+              // Clean up ID for display (game-would_rather -> Would Rather)
+              String name = gameId.replaceAll('game-', '').replaceAll('_', ' ').capitalize();
+              if (name == "Reflex") name = "Reaction Time"; // Manual fix for clean name
+
+              return Container(
+                width: 140,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppConstants.surfaceColor,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppConstants.primaryColor.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$wins Wins',
+                      style: const TextStyle(
+                        color: AppConstants.accentGold,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                     Text(
+                      'Best Streak: ${progress.gameBestStreak[gameId] ?? 0}',
+                      style: TextStyle(
+                        color: AppConstants.textMuted,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildMenuSection(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -362,6 +609,24 @@ class ProfileScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
+        _buildMenuItem(
+          icon: Icons.workspace_premium_rounded,
+          label: 'Facecode Elite',
+          onTap: () => Navigator.of(context).pushNamed('/elite'),
+        ),
+        _buildMenuItem(
+          icon: Icons.storefront_outlined,
+          label: 'Cosmetic Shop',
+          onTap: () => Navigator.of(context).pushNamed('/shop'),
+        ),
+        _buildMenuItem(
+          icon: Icons.insights_rounded,
+          label: 'Engagement Insights',
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const EngagementDashboardScreen()),
+          ),
+        ),
         _buildMenuItem(
           icon: Icons.person_outline_rounded,
           label: 'Edit Profile',
@@ -526,6 +791,48 @@ class ProfileScreen extends StatelessWidget {
       },
     );
   }
+
+  Widget _buildDailyBestBadge(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppConstants.accentGold, AppConstants.cardOrange],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppConstants.accentGold.withValues(alpha: 0.3),
+            blurRadius: 10,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.emoji_events_rounded, color: Colors.white, size: 14),
+          const SizedBox(width: 4),
+          const Text(
+            "TODAY'S BEST",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    ).animate(onPlay: (c) => c.repeat())
+     .shimmer(duration: 2.seconds, color: Colors.white24)
+     .scale(begin: const Offset(1, 1), end: const Offset(1.05, 1.05), duration: 1.seconds, curve: Curves.easeInOut);
+  }
 }
 
-                
+
+extension StringExtension on String {
+  String capitalize() {
+    if (isEmpty) return this;
+    return "${this[0].toUpperCase()}${substring(1)}";
+  }
+}

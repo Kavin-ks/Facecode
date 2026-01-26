@@ -1,47 +1,40 @@
 import 'package:flutter/services.dart';
+import 'package:facecode/services/sound_manager.dart';
 
-/// Simple sound effects using platform system sounds.
-///
-/// This avoids shipping audio assets for Version 1.
+/// Wrapper to bridge legacy calls to new SoundManager
 class SoundService {
   static Future<void> tap() async {
     try {
-      await SystemSound.play(SystemSoundType.click);
-    } catch (_) {
-      // Ignore platform limitations.
-    }
+      await HapticFeedback.lightImpact();
+      // SoundManager().playUiSound(SoundManager.sfxUiTap); // Redundant if buttons handle it
+    } catch (_) {}
   }
 
   static Future<void> correct() async {
     try {
-      await HapticFeedback.lightImpact();
-      await SystemSound.play(SystemSoundType.click);
-    } catch (_) {
-      // Ignore platform limitations.
-    }
+      await HapticFeedback.mediumImpact();
+      SoundManager().playGameSound(SoundManager.sfxCorrect);
+    } catch (_) {}
   }
 
   static Future<void> wrong() async {
     try {
-      await HapticFeedback.mediumImpact();
-    } catch (_) {
-      // Ignore platform limitations.
-    }
+      await HapticFeedback.heavyImpact();
+      SoundManager().playGameSound(SoundManager.sfxGameFail);
+    } catch (_) {}
   }
 
   static Future<void> roundStart() async {
     try {
       await HapticFeedback.selectionClick();
-    } catch (_) {
-      // Ignore platform limitations.
-    }
+      SoundManager().playGameSound(SoundManager.sfxGameStart);
+    } catch (_) {}
   }
 
   static Future<void> roundEnd() async {
     try {
-      await HapticFeedback.heavyImpact();
-    } catch (_) {
-      // Ignore platform limitations.
-    }
+      await HapticFeedback.mediumImpact();
+      // Neutral sound or handled by specific result logic
+    } catch (_) {}
   }
 }

@@ -7,6 +7,9 @@ import 'package:facecode/providers/progress_provider.dart';
 import 'package:facecode/utils/constants.dart';
 import 'package:facecode/widgets/premium_ui.dart';
 import 'package:facecode/services/game_feedback_service.dart';
+import 'package:facecode/providers/analytics_provider.dart';
+import 'package:facecode/widgets/game/game_outcome_actions.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Reaction Time mini-game
 class ReactionTimeScreen extends StatefulWidget {
@@ -27,11 +30,85 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
   int _attempts = 0;
   final List<int> _recentTimes = [];
 
+  // persistence keys
+  static const _kAllKey = 'reaction_history_ms';
+  static const _kBestKey = 'reaction_best_ms';
+  static const _kDailyPrefix = 'reaction_daily_';
+  List<int> _historyAll = [];
+
   @override
   void initState() {
     super.initState();
     _confettiController = ConfettiController(duration: const Duration(seconds: 2));
+    _loadPersisted();
   }
+
+  Future<void> _loadPersisted() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_kAllKey) ?? [];
+    setState(() {
+      _historyAll = list.map((s) => int.tryParse(s) ?? 0).where((v) => v > 0).toList();
+      if (_historyAll.isNotEmpty) {
+        _bestTime = prefs.getInt(_kBestKey) ?? _historyAll.reduce(min);
+        _attempts = _historyAll.length;
+        // keep recentTimes as last up to 6 for the small chart
+        final r = _historyAll.reversed.take(6).toList().reversed.toList();
+        _recentTimes.clear();
+        _recentTimes.addAll(r);
+      }
+    });
+  }
+
+  Future<void> _recordResult(int ms) async {
+    final prefs = await SharedPreferences.getInstance();
+    _historyAll.add(ms);
+    _attempts = _historyAll.length;
+    _recentTimes.insert(0, ms);
+    if (_recentTimes.length > 6) _recentTimes.removeLast();
+    if (ms < _bestTime) {
+      _bestTime = ms;
+      await prefs.setInt(_kBestKey, _bestTime);
+      _confettiController.play();
+    }
+    await prefs.setStringList(_kAllKey, _historyAll.map((e) => e.toString()).toList());
+    // daily
+    final today = DateTime.now().toIso8601String().split('T').first;
+    final dailyKey = '$_kDailyPrefix$today';
+    final daily = prefs.getStringList(dailyKey) ?? [];
+    daily.add(ms.toString());
+    await prefs.setStringList(dailyKey, daily);
+    setState(() {});
+  }
+
+  static const double sqrt2 = 1.4142135623730951;
+
+  double _percentileFor(int ms) {
+    // approximate percentile using mean ~250ms sd ~60ms
+    const double mu = 250.0;
+    const double sigma = 60.0;
+    final z = (ms - mu) / sigma;
+    final cdf = 0.5 * (1 + _erf(z / sqrt2));
+    var p = (1 - cdf) * 100;
+    if (p < 1) p = 1;
+    if (p > 99) p = 99;
+    return p;
+  }
+
+  double _erf(double x) {
+    // Abramowitz and Stegun approximation
+    final sign = x < 0 ? -1 : 1;
+    const double a1 =  0.254829592;
+    const double a2 = -0.284496736;
+    const double a3 =  1.421413741;
+    const double a4 = -1.453152027;
+    const double a5 =  1.061405429;
+    const double p =  0.3275911;
+    final absX = x.abs();
+    final t = 1.0 / (1.0 + p * absX);
+    var y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (exp(-absX * absX));
+    return sign * y;
+  }
+
 
   @override
   void dispose() {
@@ -65,7 +142,7 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
     });
   }
 
-  void _onTap() {
+  Future<void> _onTap() async {
     if (_state == GameState.waiting) {
       // Too early!
       _delayTimer?.cancel();
@@ -88,21 +165,13 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
       
       setState(() {
         _reactionTime = diff;
-        _attempts++;
-        _recentTimes.add(diff);
-        if (_recentTimes.length > 5) {
-          _recentTimes.removeAt(0);
-        }
-        
-        if (diff < _bestTime) {
-          _bestTime = diff;
-          _confettiController.play();
-        }
-        
         _state = GameState.result;
       });
 
       GameFeedbackService.success();
+
+      // record result persistently + update UI
+      await _recordResult(diff);
 
       // Award XP based on performance + track result
       int xp = 10;
@@ -114,11 +183,14 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
         xp = 20; // Good
       }
 
-      context.read<ProgressProvider>().recordGameResult(
-        gameId: 'reaction_time',
-        won: diff < 300,
-        xpAward: xp,
-      );
+      if (!mounted) return;
+        context.read<ProgressProvider>().recordGameResult(
+          gameId: 'game-reaction-time',
+          won: true,
+          xpAward: xp,
+          reactionTimeMs: _reactionTime,
+          analytics: context.read<AnalyticsProvider>(),
+        );
     }
   }
 
@@ -153,9 +225,21 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
         ),
         body: Stack(
           children: [
-            SafeArea(
-              child: Column(
-                children: [
+            // Full screen color overlay to mimic pure red/green reaction test
+        Positioned.fill(
+          child: IgnorePointer(
+            ignoring: true,
+            child: AnimatedContainer(
+              duration: AppConstants.animationFast,
+              color: _state == GameState.tap
+                  ? const Color(0xFF00E676)
+                  : (_state == GameState.waiting ? const Color(0xFFFF4081) : Colors.transparent),
+            ),
+          ),
+        ),
+        SafeArea(
+          child: Column(
+            children: [
                   // Stats Row
                   Padding(
                     padding: const EdgeInsets.all(AppConstants.defaultPadding),
@@ -193,11 +277,91 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
                     ),
                   ),
 
-                  // Main Game Area
+                  // Main Game Area - Using GestureDetector instead of PremiumTap for reliable taps
                   Expanded(
                     child: GestureDetector(
-                      onTap: _onTap,
+                      onTap: () {
+                        debugPrint('🎯 Reaction game tapped! State: $_state');
+                        _onTap();
+                      },
+                      behavior: HitTestBehavior.opaque,
                       child: _buildGameArea(),
+                    ),
+                  ),
+
+                  // Recent attempts chart (Fixed: reduced padding to prevent overflow)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding, vertical: 4),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppConstants.surfaceColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text(
+                            'Recent attempts',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            height: 80,
+                            child: _recentTimes.isEmpty
+                                ? const Center(
+                                    child: Text(
+                                      'No attempts yet',
+                                      style: TextStyle(color: AppConstants.textSecondary),
+                                    ),
+                                  )
+                                : Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                    children: _recentTimes.map((t) {
+                                      final maxVal = max(350, _recentTimes.reduce(max));
+                                      final normalizedHeight = (t / maxVal).clamp(0.2, 1.0);
+                                      final h = normalizedHeight * 48;
+                                      final isBest = t == _bestTime;
+                                      
+                                      return Expanded(
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.end,
+                                            children: [
+                                              Text(
+                                                '$t',
+                                                style: const TextStyle(
+                                                  color: Colors.white70,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Container(
+                                                height: h,
+                                                decoration: BoxDecoration(
+                                                  color: isBest
+                                                      ? AppConstants.accentGold
+                                                      : AppConstants.primaryColor,
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
 
@@ -244,10 +408,15 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
         content = Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.touch_app,
-              size: 100,
-              color: AppConstants.primaryColor,
+            AnimatedScale(
+              scale: _state == GameState.tap ? 1.08 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutBack,
+              child: Icon(
+                Icons.touch_app,
+                size: 100,
+                color: AppConstants.primaryColor,
+              ),
             ),
             const SizedBox(height: 24),
             const Text(
@@ -274,13 +443,18 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
         backgroundColor = const Color(0xFFFF4081);
         content = Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(
-              Icons.access_time,
-              size: 100,
-              color: Colors.white,
+          children: [
+            AnimatedScale(
+              scale: _state == GameState.tap ? 1.08 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutBack,
+              child: const Icon(
+                Icons.access_time,
+                size: 100,
+                color: Colors.white,
+              ),
             ),
-            SizedBox(height: 24),
+            const SizedBox(height: 24),
             Text(
               'Wait...',
               style: TextStyle(
@@ -305,13 +479,18 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
         backgroundColor = const Color(0xFF00E676);
         content = Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(
-              Icons.flash_on,
-              size: 120,
-              color: Colors.white,
+          children: [
+            AnimatedScale(
+              scale: _state == GameState.tap ? 1.12 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutBack,
+              child: const Icon(
+                Icons.flash_on,
+                size: 120,
+                color: Colors.white,
+              ),
             ),
-            SizedBox(height: 24),
+            const SizedBox(height: 24),
             Text(
               'TAP NOW!',
               style: TextStyle(
@@ -329,13 +508,18 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
         backgroundColor = const Color(0xFFFF5252);
         content = Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(
-              Icons.cancel,
-              size: 100,
-              color: Colors.white,
+          children: [
+            AnimatedScale(
+              scale: _state == GameState.tooEarly ? 1.06 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutBack,
+              child: const Icon(
+                Icons.cancel,
+                size: 100,
+                color: Colors.white,
+              ),
             ),
-            SizedBox(height: 24),
+            const SizedBox(height: 24),
             Text(
               'Too Early!',
               style: TextStyle(
@@ -419,6 +603,9 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 12),
+            if (time > 0) Text('${_percentileFor(time).toStringAsFixed(0)}th percentile', style: const TextStyle(color: AppConstants.textSecondary)),
+
           ],
         );
         break;
@@ -449,10 +636,20 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
         onPressed: _startGame,
       );
     } else if (_state == GameState.result) {
-      return GradientButton(
-        text: 'Try Again',
-        icon: Icons.refresh,
-        onPressed: _reset,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          GameOutcomeActions(
+            gameId: 'game-reaction-time',
+            onReplay: _reset,
+            onTryAnother: () => Navigator.of(context).maybePop(),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: _showDailyLeaderboard,
+            child: const Text('Today\'s Reaction Leaderboard'),
+          ),
+        ],
       );
     } else {
       return NeonCard(
@@ -479,6 +676,53 @@ class _ReactionTimeScreenState extends State<ReactionTimeScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _showDailyLeaderboard() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = DateTime.now().toIso8601String().split('T').first;
+    final list = prefs.getStringList('$_kDailyPrefix$today') ?? [];
+    final times = list.map((s) => int.tryParse(s) ?? 0).where((v) => v > 0).toList();
+    if (times.isEmpty) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Today\'s leaderboard'),
+          content: const Text('No entries yet for today.'),
+          actions: [TextButton(onPressed: () => Navigator.of(c).pop(), child: const Text('Close'))],
+        ),
+      );
+      return;
+    }
+    times.sort();
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+      builder: (c) {
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Today\'s Reaction Leaderboard', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              const SizedBox(height: 12),
+              ...List.generate(min(times.length, 10), (i) {
+                final t = times[i];
+                return ListTile(
+                  leading: CircleAvatar(child: Text('${i + 1}')),
+                  title: Text('$t ms'),
+                );
+              }),
+              TextButton(onPressed: () => Navigator.of(c).pop(), child: const Text('Close')),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 

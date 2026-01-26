@@ -3,11 +3,16 @@ import 'package:flutter/material.dart';
 /// App-wide constants - Modern Play Store Game Hub Style
 class AppConstants {
   // Game Settings
-  static const int roundDuration = 60; // seconds
+  static const int roundDuration = 45; // seconds (Reduced from 60 for faster sessions)
   static const int pointsPerCorrectGuess = 10;
-  static const Duration guessCooldown = Duration(seconds: 2);
+  static const Duration guessCooldown = Duration(milliseconds: 1500); // Faster feedback
   static const int minPlayers = 2;
   static const int maxPlayers = 8;
+  static const int firstWinBonus = 250; // Daily bonus reward
+  static const Duration latencyGracePeriod = Duration(seconds: 2);
+  
+  /// Whether ads should be shown for the user
+  static bool shouldShowAds(bool isElite) => !isElite;
 
   // UI Constants
   static const double defaultPadding = 16.0;
@@ -25,6 +30,13 @@ class AppConstants {
   static const Duration animationDuration = Duration(milliseconds: 300);
   static const Duration animationFast = Duration(milliseconds: 150);
   static const Duration animationSlow = Duration(milliseconds: 500);
+
+  /// Central Motion Configuration
+  static const Duration motionDurationShort = Duration(milliseconds: 100);
+  static const Duration motionDurationMedium = Duration(milliseconds: 300);
+  static const Duration motionDurationLong = Duration(milliseconds: 600);
+  static const Curve motionCurveDefault = Curves.easeOutCubic;
+  static const Curve motionCurveSpring = Curves.easeOutBack;
 
   // Modern Dark Theme Colors (more vibrant)
   static const Color primaryColor = Color(0xFF7C4DFF);      // Electric purple

@@ -4,6 +4,11 @@ import 'package:facecode/screens/leaderboard_screen.dart';
 import 'package:facecode/screens/badges_screen.dart';
 import 'package:facecode/screens/profile_screen.dart';
 import 'package:facecode/utils/constants.dart';
+import 'package:facecode/widgets/ui_kit.dart';
+import 'package:facecode/widgets/streak_celebration_overlay.dart';
+import 'package:provider/provider.dart';
+import 'package:facecode/providers/progress_provider.dart';
+import 'package:facecode/widgets/daily_best_announcement.dart';
 
 /// Main navigation shell with bottom navigation bar
 /// Matches modern Play Store game hub style
@@ -26,6 +31,30 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen for streak milestones
+    final progressProvider = context.watch<ProgressProvider>();
+    if (progressProvider.hasStreakMilestonePending) {
+      // Defer to next frame to avoid build conflicts
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        // Double check to ensure we don't spam and widget is still active
+        if (mounted && progressProvider.hasStreakMilestonePending) {
+           await StreakCelebrationOverlay.show(context, progressProvider.progress.currentStreak);
+           if (!context.mounted) return;
+           context.read<ProgressProvider>().consumeStreakEvent();
+        }
+      });
+    }
+
+    // Listen for daily titles
+    if (progressProvider.hasDailyTitlesPending) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (mounted && progressProvider.hasDailyTitlesPending) {
+           DailyBestAnnouncement.show(context, progressProvider.progress.activeDailyTitles);
+           context.read<ProgressProvider>().consumeDailyTitlesEvent();
+        }
+      });
+    }
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
@@ -62,9 +91,8 @@ class _MainShellState extends State<MainShell> {
   Widget _buildNavItem(int index, IconData activeIcon, IconData inactiveIcon, String label) {
     final isSelected = _currentIndex == index;
     
-    return GestureDetector(
+    return PremiumTap(
       onTap: () => setState(() => _currentIndex = index),
-      behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

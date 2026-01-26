@@ -1,0 +1,216 @@
+Resolving dependencies...
+Downloading packages...
+  characters 1.4.0 (1.4.1 available)
+  code_assets 0.19.10 (1.0.0 available)
+  confetti 0.7.0 (0.8.0 available)
+  firebase_auth 6.1.3 (6.1.4 available)
+  firebase_auth_platform_interface 8.1.5 (8.1.6 available)
+  firebase_auth_web 6.1.1 (6.1.2 available)
+  flutter_lints 3.0.2 (6.0.0 available)
+  google_fonts 6.3.3 (8.0.0 available)
+  hooks 0.20.5 (1.0.0 available)
+  lints 3.0.0 (6.0.0 available)
+  matcher 0.12.17 (0.12.18 available)
+  material_color_utilities 0.11.1 (0.13.0 available)
+  meta 1.17.0 (1.18.0 available)
+  native_toolchain_c 0.17.2 (0.17.4 available)
+  objective_c 9.2.2 (9.2.4 available)
+  share_plus 10.1.4 (12.0.1 available)
+  share_plus_platform_interface 5.0.2 (6.1.0 available)
+  test_api 0.7.7 (0.7.9 available)
+Got dependencies!
+18 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Analyzing Facecode...                                           
+
+  error • Undefined class 'Color' • lib/models/leaderboard_entry.dart:14:9 • undefined_class
+   info • The 'if' statement could be replaced by a null-aware assignment • lib/providers/game_provider.dart:984:9 • prefer_conditional_assignment
+  error • Undefined name '_gameTimer' • lib/providers/game_provider.dart:1031:7 • undefined_identifier
+  error • Undefined name '_tieBreakTimer' • lib/providers/game_provider.dart:1032:7 • undefined_identifier
+  error • Undefined name '_tieBreakTimer' • lib/providers/game_provider.dart:1033:7 • undefined_identifier
+  error • Undefined name '_pendingCorrectGuesses' • lib/providers/game_provider.dart:1034:7 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1036:11 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1036:35 • undefined_identifier
+  error • Undefined name '_lastCorrectAnswer' • lib/providers/game_provider.dart:1038:7 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1038:28 • undefined_identifier
+  error • Undefined name '_lastRoundWasCorrect' • lib/providers/game_provider.dart:1039:7 • undefined_identifier
+  error • Undefined name '_lastRoundEndedByTime' • lib/providers/game_provider.dart:1040:7 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1042:7 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1042:22 • undefined_identifier
+  error • The function 'notifyListeners' isn't defined • lib/providers/game_provider.dart:1043:7 • undefined_function
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1047:30 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1052:26 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1053:31 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1054:27 • undefined_identifier
+  error • Undefined name '_connectionStatus' • lib/providers/game_provider.dart:1064:13 • undefined_identifier
+  error • Undefined name '_socketManager' • lib/providers/game_provider.dart:1064:47 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1065:26 • undefined_identifier
+  error • Undefined name '_socketManager' • lib/providers/game_provider.dart:1066:11 • undefined_identifier
+  error • Undefined name '_lastCorrectAnswer' • lib/providers/game_provider.dart:1066:123 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1074:30 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1079:41 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1091:11 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1091:26 • undefined_identifier
+  error • Undefined name '_lastCorrectAnswer' • lib/providers/game_provider.dart:1096:14 • undefined_identifier
+  error • The function '_setError' isn't defined • lib/providers/game_provider.dart:1100:9 • undefined_function
+  error • Undefined name '_afkWarningPending' • lib/providers/game_provider.dart:1108:7 • undefined_identifier
+  error • The function '_setError' isn't defined • lib/providers/game_provider.dart:1110:7 • undefined_function
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1122:11 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1123:11 • undefined_identifier
+  error • The function '_setError' isn't defined • lib/providers/game_provider.dart:1124:9 • undefined_function
+  error • Undefined name '_isBusy' • lib/providers/game_provider.dart:1133:7 • undefined_identifier
+  error • The function 'notifyListeners' isn't defined • lib/providers/game_provider.dart:1134:7 • undefined_function
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1136:26 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1137:11 • undefined_identifier
+  error • Undefined name '_lastGuessAt' • lib/providers/game_provider.dart:1140:7 • undefined_identifier
+  error • Undefined name '_lastGuessText' • lib/providers/game_provider.dart:1141:7 • undefined_identifier
+  error • Undefined name '_lastCorrectAnswer' • lib/providers/game_provider.dart:1142:7 • undefined_identifier
+  error • Undefined name '_lastRoundWasCorrect' • lib/providers/game_provider.dart:1143:7 • undefined_identifier
+  error • Undefined name '_lastRoundEndedByTime' • lib/providers/game_provider.dart:1144:7 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1146:7 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1146:22 • undefined_identifier
+  error • Undefined name '_roundEndsAt' • lib/providers/game_provider.dart:1154:7 • undefined_identifier
+  error • The function '_now' isn't defined • lib/providers/game_provider.dart:1154:22 • undefined_function
+  error • Undefined name '_pausedRemaining' • lib/providers/game_provider.dart:1155:7 • undefined_identifier
+  error • The function '_startTimer' isn't defined • lib/providers/game_provider.dart:1156:7 • undefined_function
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1160:11 • undefined_identifier
+  error • Undefined name '_connectionStatus' • lib/providers/game_provider.dart:1166:13 • undefined_identifier
+  error • Undefined name '_socketManager' • lib/providers/game_provider.dart:1166:47 • undefined_identifier
+  error • Undefined name '_socketManager' • lib/providers/game_provider.dart:1167:11 • undefined_identifier
+  error • Undefined name '_roundEndsAt' • lib/providers/game_provider.dart:1171:23 • undefined_identifier
+  error • The function '_setError' isn't defined • lib/providers/game_provider.dart:1176:7 • undefined_function
+  error • Undefined name '_isBusy' • lib/providers/game_provider.dart:1183:7 • undefined_identifier
+  error • The function 'notifyListeners' isn't defined • lib/providers/game_provider.dart:1184:7 • undefined_function
+  error • Undefined name '_gameTimer' • lib/providers/game_provider.dart:1191:7 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1192:11 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1194:7 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1194:22 • undefined_identifier
+  error • Undefined name '_lastCorrectAnswer' • lib/providers/game_provider.dart:1200:7 • undefined_identifier
+  error • Undefined name '_lastRoundWasCorrect' • lib/providers/game_provider.dart:1201:7 • undefined_identifier
+  error • Undefined name '_lastRoundEndedByTime' • lib/providers/game_provider.dart:1202:7 • undefined_identifier
+  error • Undefined name '_roundEndsAt' • lib/providers/game_provider.dart:1203:7 • undefined_identifier
+  error • Undefined name '_pausedRemaining' • lib/providers/game_provider.dart:1204:7 • undefined_identifier
+  error • Undefined name '_lastGuessAt' • lib/providers/game_provider.dart:1205:7 • undefined_identifier
+  error • Undefined name '_lastGuessText' • lib/providers/game_provider.dart:1206:7 • undefined_identifier
+  error • The function 'notifyListeners' isn't defined • lib/providers/game_provider.dart:1207:7 • undefined_function
+  error • The function '_setError' isn't defined • lib/providers/game_provider.dart:1209:7 • undefined_function
+  error • Undefined name '_gameTimer' • lib/providers/game_provider.dart:1220:5 • undefined_identifier
+  error • Undefined name '_connectionStatus' • lib/providers/game_provider.dart:1224:11 • undefined_identifier
+  error • Undefined name '_localNetwork' • lib/providers/game_provider.dart:1225:9 • undefined_identifier
+  error • Undefined name '_socketManager' • lib/providers/game_provider.dart:1226:9 • undefined_identifier
+  error • Undefined name '_connectionStatus' • lib/providers/game_provider.dart:1228:11 • undefined_identifier
+  error • Undefined name '_socketManager' • lib/providers/game_provider.dart:1229:9 • undefined_identifier
+  error • Undefined name '_connectionStatus' • lib/providers/game_provider.dart:1233:5 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1235:5 • undefined_identifier
+  error • Undefined name '_currentPlayer' • lib/providers/game_provider.dart:1236:5 • undefined_identifier
+  error • Undefined name '_lastCorrectAnswer' • lib/providers/game_provider.dart:1237:5 • undefined_identifier
+  error • Undefined name '_lastRoundWasCorrect' • lib/providers/game_provider.dart:1238:5 • undefined_identifier
+  error • Undefined name '_lastRoundEndedByTime' • lib/providers/game_provider.dart:1239:5 • undefined_identifier
+  error • Undefined name '_roundEndsAt' • lib/providers/game_provider.dart:1240:5 • undefined_identifier
+  error • Undefined name '_pausedRemaining' • lib/providers/game_provider.dart:1241:5 • undefined_identifier
+  error • Undefined name '_lastGuessAt' • lib/providers/game_provider.dart:1242:5 • undefined_identifier
+  error • Undefined name '_lastGuessText' • lib/providers/game_provider.dart:1243:5 • undefined_identifier
+  error • Undefined name '_uiError' • lib/providers/game_provider.dart:1244:5 • undefined_identifier
+  error • The function 'notifyListeners' isn't defined • lib/providers/game_provider.dart:1245:5 • undefined_function
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1250:9 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1251:5 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1251:20 • undefined_identifier
+  error • The function 'notifyListeners' isn't defined • lib/providers/game_provider.dart:1252:5 • undefined_function
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1256:9 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1256:33 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1257:26 • undefined_identifier
+  error • The function 'Random' isn't defined • lib/providers/game_provider.dart:1263:23 • undefined_function
+  error • The argument type 'double' can't be assigned to the parameter type 'int'.  • lib/providers/game_provider.dart:1264:29 • argument_type_not_assignable
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1265:11 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1265:35 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1266:11 • undefined_identifier
+  error • Undefined name '_currentRoom' • lib/providers/game_provider.dart:1268:22 • undefined_identifier
+  error • The function 'min' isn't defined • lib/providers/game_provider.dart:1272:39 • undefined_function
+  error • The function 'sendEmoji' isn't defined • lib/providers/game_provider.dart:1274:9 • undefined_function
+  error • Undefined name '_gameTimer' • lib/providers/game_provider.dart:1281:5 • undefined_identifier
+  error • Invalid context for 'super' invocation • lib/providers/game_provider.dart:1282:5 • super_in_invalid_context
+  error • Expected a method, getter, setter or operator declaration • lib/providers/game_provider.dart:1284:1 • expected_executable
+  error • Undefined name 'AppConstants' • lib/providers/leaderboard_provider.dart:133:21 • undefined_identifier
+  error • Undefined name 'AppConstants' • lib/providers/leaderboard_provider.dart:143:19 • undefined_identifier
+  error • Undefined name 'AppConstants' • lib/providers/leaderboard_provider.dart:146:19 • undefined_identifier
+  error • Undefined name 'AppConstants' • lib/providers/leaderboard_provider.dart:149:19 • undefined_identifier
+  error • Undefined name 'AppConstants' • lib/providers/leaderboard_provider.dart:152:19 • undefined_identifier
+  error • The getter 'totalXP' isn't defined for the type 'UserProgress' • lib/providers/progress_provider.dart:127:32 • undefined_getter
+  error • The named parameter 'forcedBadgeId' isn't defined • lib/providers/progress_provider.dart:252:30 • undefined_named_parameter
+  error • The method 'clearEmojiMessages' isn't defined for the type 'GameProvider' • lib/screens/game_screen.dart:681:30 • undefined_method
+warning • Unused import: 'package:facecode/routing/app_route.dart' • lib/screens/games/common/game_result_screen.dart:9:8 • unused_import
+  error • The method '_getWinMessage' isn't defined for the type '_GameResultScreenState' • lib/screens/games/common/game_result_screen.dart:151:57 • undefined_method
+  error • The method '_getLossMessage' isn't defined for the type '_GameResultScreenState' • lib/screens/games/common/game_result_screen.dart:151:76 • undefined_method
+  error • The named parameter 'onReplay' is required, but there's no corresponding argument • lib/screens/games/draw_guess_screen.dart:60:25 • missing_required_argument
+  error • The named parameter 'onReplay' is required, but there's no corresponding argument • lib/screens/games/fastest_finger_screen.dart:393:25 • missing_required_argument
+  error • The named parameter 'onReplay' is required, but there's no corresponding argument • lib/screens/games/memory_cards_screen.dart:223:25 • missing_required_argument
+  error • The named parameter 'onReplay' is required, but there's no corresponding argument • lib/screens/games/memory_cards_screen.dart:374:25 • missing_required_argument
+  error • The named parameter 'onReplay' is required, but there's no corresponding argument • lib/screens/games/simon_says_screen.dart:227:25 • missing_required_argument
+  error • The named parameter 'onReplay' is required, but there's no corresponding argument • lib/screens/games/tic_tac_toe_screen.dart:224:31 • missing_required_argument
+  error • Expected to find ')' • lib/screens/leaderboard_screen.dart:322:6 • expected_token
+  error • Expected to find ']' • lib/screens/leaderboard_screen.dart:379:17 • expected_token
+  error • Expected an identifier • lib/screens/leaderboard_screen.dart:380:17 • missing_identifier
+  error • Expected to find ')' • lib/screens/leaderboard_screen.dart:380:17 • expected_token
+  error • Expected to find ',' • lib/screens/leaderboard_screen.dart:380:17 • expected_token
+  error • Expected an identifier • lib/screens/leaderboard_screen.dart:425:9 • missing_identifier
+  error • Expected to find ')' • lib/screens/leaderboard_screen.dart:425:9 • expected_token
+  error • Expected to find ';' • lib/screens/leaderboard_screen.dart:426:7 • expected_token
+warning • Dead code • lib/screens/leaderboard_screen.dart:426:8 • dead_code
+  error • Expected an identifier • lib/screens/leaderboard_screen.dart:426:8 • missing_identifier
+  error • Expected to find ';' • lib/screens/leaderboard_screen.dart:426:8 • expected_token
+  error • Unexpected text ';' • lib/screens/leaderboard_screen.dart:426:8 • unexpected_token
+  error • Expected an identifier • lib/screens/leaderboard_screen.dart:427:5 • missing_identifier
+  error • Unexpected text ';' • lib/screens/leaderboard_screen.dart:427:5 • unexpected_token
+  error • This requires the 'dot-shorthands' language feature to be enabled • lib/screens/leaderboard_screen.dart:427:6 • experiment_not_enabled
+  error • The static method or constructor 'animate' isn't defined for the context type '_' • lib/screens/leaderboard_screen.dart:427:7 • dot_shorthand_undefined_member
+  error • The method 'leaveRoom' isn't defined for the type 'GameProvider' • lib/screens/lobby_screen.dart:72:18 • undefined_method
+  error • The method 'leaveRoom' isn't defined for the type 'GameProvider' • lib/screens/lobby_screen_modern.dart:67:18 • undefined_method
+warning • This class (or a class that this class inherits from) is marked as '@immutable', but one or more of its instance fields aren't final: ProfileScreen.extension, ProfileScreen.on • lib/screens/profile_screen.dart:25:7 • must_be_immutable
+  error • Can't define a const constructor for a class with non-final fields • lib/screens/profile_screen.dart:26:9 • const_constructor_with_non_final_field
+  error • String isn't a type • lib/screens/profile_screen.dart:119:68 • not_a_type
+  error • String isn't a type • lib/screens/profile_screen.dart:119:85 • not_a_type
+  error • The method '_buildDailyBestBadge' isn't defined for the type 'ProfileScreen' • lib/screens/profile_screen.dart:174:23 • undefined_method
+  error • String isn't a type • lib/screens/profile_screen.dart:432:25 • not_a_type
+  error • String isn't a type • lib/screens/profile_screen.dart:432:39 • not_a_type
+  error • String isn't a type • lib/screens/profile_screen.dart:448:25 • not_a_type
+  error • String isn't a type • lib/screens/profile_screen.dart:448:39 • not_a_type
+  error • String isn't a type • lib/screens/profile_screen.dart:448:53 • not_a_type
+  error • The name 'String' isn't a type, so it can't be used as a type argument • lib/screens/profile_screen.dart:487:25 • non_type_as_type_argument
+  error • String isn't a type • lib/screens/profile_screen.dart:547:15 • not_a_type
+  error • String isn't a type • lib/screens/profile_screen.dart:656:14 • not_a_type
+   info • The local variable '_buildDailyBestBadge' starts with an underscore • lib/screens/profile_screen.dart:793:10 • no_leading_underscores_for_local_identifiers
+warning • The declaration '_buildDailyBestBadge' isn't referenced • lib/screens/profile_screen.dart:793:10 • unused_element
+   info • An uninitialized field should have an explicit type annotation • lib/screens/profile_screen.dart:831:1 • prefer_typing_uninitialized_variables
+  error • Expected to find ';' • lib/screens/profile_screen.dart:831:1 • expected_token
+  error • Variables must be declared using the keywords 'const', 'final', 'var' or a type name • lib/screens/profile_screen.dart:831:1 • missing_const_final_var_or_type
+  error • Undefined class 'StringExtension' • lib/screens/profile_screen.dart:831:11 • undefined_class
+  error • Expected to find ';' • lib/screens/profile_screen.dart:831:27 • expected_token
+   info • The variable name 'String' isn't a lowerCamelCase identifier • lib/screens/profile_screen.dart:831:30 • non_constant_identifier_names
+  error • Methods must have an explicit list of parameters • lib/screens/profile_screen.dart:831:30 • missing_method_parameters
+  error • String isn't a type • lib/screens/profile_screen.dart:832:3 • not_a_type
+warning • The declaration 'capitalize' isn't referenced • lib/screens/profile_screen.dart:832:10 • unused_element
+  error • Undefined name 'isEmpty' • lib/screens/profile_screen.dart:833:9 • undefined_identifier
+  error • The operator '[]' isn't defined for the type 'ProfileScreen' • lib/screens/profile_screen.dart:834:19 • undefined_operator
+  error • The method 'substring' isn't defined for the type 'ProfileScreen' • lib/screens/profile_screen.dart:834:39 • undefined_method
+  error • Expected to find '}' • lib/screens/profile_screen.dart:836:2 • expected_token
+  error • The method 'GlassCard' isn't defined for the type 'PublicProfileScreen' • lib/screens/public_profile_screen.dart:64:12 • undefined_method
+  error • The method 'GlassCard' isn't defined for the type 'PublicProfileScreen' • lib/screens/public_profile_screen.dart:167:14 • undefined_method
+  error • The named parameter 'label' is required, but there's no corresponding argument • lib/screens/public_profile_screen.dart:230:29 • missing_required_argument
+  error • The named parameter 'title' isn't defined • lib/screens/public_profile_screen.dart:232:17 • undefined_named_parameter
+  error • The named parameter 'child' is required, but there's no corresponding argument • lib/screens/public_profile_screen.dart:238:20 • missing_required_argument
+  error • The named parameter 'badge' isn't defined • lib/screens/public_profile_screen.dart:239:15 • undefined_named_parameter
+  error • The named parameter 'isUnlocked' isn't defined • lib/screens/public_profile_screen.dart:240:15 • undefined_named_parameter
+  error • The named parameter 'size' isn't defined • lib/screens/public_profile_screen.dart:241:15 • undefined_named_parameter
+  error • The named parameter 'showTitle' isn't defined • lib/screens/public_profile_screen.dart:242:15 • undefined_named_parameter
+  error • The getter 'backOut' isn't defined for the type 'Curves' • lib/screens/public_profile_screen.dart:243:94 • undefined_getter
+  error • The method 'nextRound' isn't defined for the type 'GameProvider' • lib/screens/result_screen.dart:48:14 • undefined_method
+  error • The method 'leaveRoom' isn't defined for the type 'GameProvider' • lib/screens/result_screen.dart:53:34 • undefined_method
+warning • Unused import: 'package:facecode/services/sound_manager.dart' • lib/widgets/afk_warning_overlay.dart:4:8 • unused_import
+  error • The named parameter 'amount' isn't defined • lib/widgets/afk_warning_overlay.dart:37:76 • undefined_named_parameter
+  error • The name 'ProgressProvider' isn't a type, so it can't be used as a type argument • lib/widgets/game/game_outcome_actions.dart:23:44 • non_type_as_type_argument
+  error • Undefined class 'ProgressProvider' • lib/widgets/game/game_outcome_actions.dart:74:50 • undefined_class
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/widgets/game/game_outcome_actions.dart:111:88 • deprecated_member_use
+  error • The method 'shaking' isn't defined for the type 'Animate' • lib/widgets/game/mystery_reward_overlay.dart:135:32 • undefined_method
+  error • The method 'nextRound' isn't defined for the type 'GameProvider' • test/game_provider_test.dart:121:14 • undefined_method
+
+189 issues found. (ran in 2.1s)

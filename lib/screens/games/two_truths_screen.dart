@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:facecode/widgets/game/game_outcome_actions.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:confetti/confetti.dart';
 import 'package:facecode/utils/constants.dart';
@@ -10,6 +11,9 @@ import 'package:facecode/models/player.dart';
 import 'package:uuid/uuid.dart';
 import 'package:facecode/providers/progress_provider.dart';
 import 'package:facecode/services/game_feedback_service.dart';
+import 'package:facecode/services/sound_manager.dart';
+import 'package:facecode/providers/analytics_provider.dart';
+import 'package:facecode/widgets/ui_kit.dart';
 
 class TwoTruthsScreen extends StatefulWidget {
   const TwoTruthsScreen({super.key});
@@ -23,14 +27,17 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
   final Random _rng = Random();
   final TextEditingController _playerNameController = TextEditingController();
   final List<TextEditingController> _statementControllers = List.generate(3, (_) => TextEditingController());
-  int _lieIndex = 0; // 0, 1, or 2
   bool _useAiFill = true;
-  int _roundsPerPlayer = 1;
+  int _totalRounds = 5; // 0 = endless
   int _lastRoundNumber = -1;
   TwoTruthsPhase? _lastPhase;
   final Set<String> _aiVotedThisRound = {};
   bool _aiStorytellerSubmitted = false;
+  bool _lieRevealPlayed = false; // ensure reveal effects play only once per round
+  bool _lieFlash = false; // transient UI flash when the lie is revealed
   final List<String> _aiNames = ['Nova', 'Pixel', 'Echo', 'Blitz', 'Luna', 'Orion', 'Vega'];
+  final List<String> _avatarOptions = ['😀', '😎', '🤖', '🦊', '🐶', '🐱', '🐼', '🐸', '🦄', '🐙'];
+  String _selectedAvatar = '😀';
 
   final List<String> _aiTruths = [
     'I can solve a Rubik\'s cube in under a minute.',
@@ -106,7 +113,9 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
     String title = "Two Truths & One Lie";
     String subtitle = "";
 
-    if (provider.phase == TwoTruthsPhase.setup) {
+    if (provider.phase == TwoTruthsPhase.intro) {
+      subtitle = "Party game for everyone";
+    } else if (provider.phase == TwoTruthsPhase.setup) {
       subtitle = "Add Players to Start";
     } else if (provider.phase == TwoTruthsPhase.input) {
       subtitle = "Storyteller: ${provider.currentStoryteller?.name}";
@@ -130,7 +139,7 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
                    Navigator.pop(context);
                 },
               ),
-              if (provider.phase != TwoTruthsPhase.setup && provider.phase != TwoTruthsPhase.scoreboard)
+              if (provider.phase != TwoTruthsPhase.intro && provider.phase != TwoTruthsPhase.setup && provider.phase != TwoTruthsPhase.scoreboard)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
@@ -143,7 +152,7 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
                     ],
                   ),
                   child: Text(
-                    "Round ${provider.currentRoundNumber}/${provider.totalRounds}",
+                    "Round ${provider.currentRoundNumber}/${provider.totalRounds == 0 ? '∞' : provider.totalRounds}",
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ),
@@ -165,30 +174,6 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
               subtitle,
               style: const TextStyle(color: AppConstants.secondaryColor, fontSize: 16),
             ).animate().fadeIn().slideY(begin: 0.2),
-          if (provider.phase == TwoTruthsPhase.input || provider.phase == TwoTruthsPhase.voting)
-             Padding(
-               padding: const EdgeInsets.only(top: 16),
-               child: Column(
-                 children: [
-                    LinearProgressIndicator(
-                      value: provider.secondsRemaining / (provider.phase == TwoTruthsPhase.input ? 60 : 30),
-                      backgroundColor: Colors.white10,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        provider.secondsRemaining < 10 ? Colors.redAccent : AppConstants.primaryColor
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "${provider.secondsRemaining}s remaining",
-                      style: TextStyle(
-                        color: provider.secondsRemaining < 10 ? Colors.redAccent : AppConstants.textSecondary,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold
-                      ),
-                    ),
-                 ],
-               ),
-             ),
         ],
       ),
     );
@@ -196,6 +181,8 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
 
   Widget _buildPhaseView(TwoTruthsProvider provider) {
     switch (provider.phase) {
+      case TwoTruthsPhase.intro:
+        return _buildIntroView(provider);
       case TwoTruthsPhase.setup:
         return _buildSetupView(provider);
       case TwoTruthsPhase.input:
@@ -207,6 +194,104 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
       case TwoTruthsPhase.scoreboard:
         return _buildScoreboardView(provider);
     }
+  }
+
+  Widget _buildIntroView(TwoTruthsProvider provider) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.casino_rounded, color: AppConstants.accentGold, size: 64),
+          const SizedBox(height: 16),
+          const Text(
+            "Two Truths & One Lie",
+            style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Vote on the lie and rack up points.",
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => _showHowToPlayModal(provider),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppConstants.primaryColor,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              child: const Text(
+                "START GAME",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ).animate().fadeIn().slideY(begin: 0.2);
+  }
+
+  void _showHowToPlayModal(TwoTruthsProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: AppConstants.surfaceColor,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Text(
+                "How to play",
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              _buildRulesContent(),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    provider.startSetup();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppConstants.successColor,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Text("START GAME", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // --- SETUP PHASE ---
@@ -248,6 +333,27 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
               ),
             ],
           ),
+          const SizedBox(width: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _avatarOptions.map((avatar) {
+              final isSelected = _selectedAvatar == avatar;
+              return GestureDetector(
+                onTap: () => setState(() => _selectedAvatar = avatar),
+                child: AnimatedContainer(
+                  duration: 200.ms,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected ? AppConstants.primaryColor : Colors.white10,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isSelected ? Colors.white : Colors.white12),
+                  ),
+                  child: Text(avatar, style: const TextStyle(fontSize: 18)),
+                ),
+              );
+            }).toList(),
+          ),
           const SizedBox(height: 12),
           _buildSetupControls(provider),
           const SizedBox(height: 12),
@@ -287,7 +393,10 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
                   child: ListTile(
                     leading: CircleAvatar(
                       backgroundColor: Colors.black.withValues(alpha: 0.2),
-                      child: Text(player.name[0].toUpperCase(), style: const TextStyle(color: Colors.white)),
+                      child: Text(
+                        player.avatar ?? player.name[0].toUpperCase(),
+                        style: const TextStyle(color: Colors.white, fontSize: 18),
+                      ),
                     ),
                     title: Text(player.name, style: const TextStyle(color: Colors.white)),
                     trailing: IconButton(
@@ -302,8 +411,11 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: (provider.players.length >= 2 || (_useAiFill && provider.players.isNotEmpty))
+              onPressed: (provider.players.isNotEmpty)
                   ? () {
+                      if (provider.players.length < 2 && !_useAiFill) {
+                        setState(() => _useAiFill = true);
+                      }
                       final players = _buildStartingPlayers(provider);
                       if (players.length < 2) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -311,7 +423,7 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
                         );
                         return;
                       }
-                      provider.setupGame(players, roundsPerPlayer: _roundsPerPlayer);
+                      provider.setupGame(players, totalRounds: _totalRounds);
                     }
                   : null,
               style: ElevatedButton.styleFrom(
@@ -321,7 +433,7 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
               child: const Text(
-                "START ROUND",
+                "START GAME",
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
               ),
             ),
@@ -348,19 +460,36 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Text(
+        children: [
+          const Text(
             "How to play",
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
-          SizedBox(height: 8),
-          Text("• One player is the storyteller each round.", style: TextStyle(color: Colors.white70, height: 1.3)),
-          Text("• Storyteller writes 2 truths and 1 lie.", style: TextStyle(color: Colors.white70, height: 1.3)),
-          Text("• Everyone else guesses the lie.", style: TextStyle(color: Colors.white70, height: 1.3)),
-          Text("• Correct guess: +1 point. Storyteller: +1 if majority guess wrong.", style: TextStyle(color: Colors.white70, height: 1.3)),
+          const SizedBox(height: 8),
+          _buildRulesContent(),
         ],
       ),
     ).animate().fadeIn().slideY(begin: 0.1);
+  }
+
+  Widget _buildRulesContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: const [
+        Text(
+          "One player is the storyteller each round.",
+          style: TextStyle(color: Colors.white70, height: 1.3),
+        ),
+        SizedBox(height: 6),
+        Text("Write two truths and one lie.", style: TextStyle(color: Colors.white70, height: 1.3)),
+        SizedBox(height: 6),
+        Text("Everyone votes on the lie.", style: TextStyle(color: Colors.white70, height: 1.3)),
+        SizedBox(height: 6),
+        Text("Correct guess: +1 point.", style: TextStyle(color: Colors.white70, height: 1.3)),
+        SizedBox(height: 6),
+        Text("Storyteller: +2 if majority guess wrong.", style: TextStyle(color: Colors.white70, height: 1.3)),
+      ],
+    );
   }
 
   void _addPlayer(TwoTruthsProvider provider) {
@@ -377,6 +506,7 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
       provider.addPlayer(Player(
         id: const Uuid().v4(),
         name: name,
+        avatar: _selectedAvatar,
       ));
       _playerNameController.clear();
     }
@@ -416,85 +546,31 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
             ),
           if (isAiStoryteller)
             const SizedBox(height: 16),
-          ...List.generate(3, (index) => 
-            Padding(
-              padding: const EdgeInsets.only(bottom: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  GestureDetector(
-                    onTap: () => setState(() => _lieIndex = index),
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 8, left: 4),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _lieIndex == index ? Icons.error_outline : Icons.check_circle_outline,
-                            size: 16,
-                            color: _lieIndex == index ? Colors.redAccent : Colors.greenAccent,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _lieIndex == index ? "THIS IS MY LIE" : "THIS IS A TRUTH",
-                            style: TextStyle(
-                              color: _lieIndex == index ? Colors.redAccent : Colors.greenAccent,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              letterSpacing: 1
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  TextField(
-                    controller: _statementControllers[index],
-                    style: const TextStyle(color: Colors.white),
-                    maxLines: 2,
-                    enabled: !isAiStoryteller,
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: AppConstants.surfaceLight,
-                      hintText: "Wait for it... something clever...",
-                      hintStyle: const TextStyle(color: Colors.white24, fontSize: 14),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: _lieIndex == index ? Colors.redAccent.withValues(alpha: 0.3) : Colors.transparent)
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          ),
+          _buildStatementField(label: "Truth #1", controller: _statementControllers[0], enabled: !isAiStoryteller),
+          const SizedBox(height: 16),
+          _buildStatementField(label: "Truth #2", controller: _statementControllers[1], enabled: !isAiStoryteller),
+          const SizedBox(height: 16),
+          _buildStatementField(label: "Lie", controller: _statementControllers[2], enabled: !isAiStoryteller, isLie: true),
           const SizedBox(height: 12),
           ElevatedButton(
             onPressed: isAiStoryteller ? null : () {
-              bool valid = true;
-              for (var c in _statementControllers) {
-                if (c.text.trim().split(' ').length < 5) {
-                  valid = false;
-                  break;
-                }
+              GameFeedbackService.tap();
+              final entries = _statementControllers.map((c) => c.text.trim()).toList();
+              if (entries.any((e) => e.isEmpty)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Please enter something!")),
+                );
+                return;
               }
-              
-              if (!valid) {
-                 ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Make it harder! Use at least 5 words per statement."))
-                  );
-                  return;
+              final lower = entries.map((e) => e.toLowerCase()).toList();
+              if (lower.toSet().length != lower.length) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Make them different!")),
+                );
+                return;
               }
 
-              List<String> truths = [];
-              String lie = "";
-              for (int i = 0; i < 3; i++) {
-                if (i == _lieIndex) {
-                  lie = _statementControllers[i].text;
-                } else {
-                  truths.add(_statementControllers[i].text);
-                }
-              }
-              provider.submitStatements(truths, lie);
+              provider.submitStatements([entries[0], entries[1]], entries[2]);
               for (var c in _statementControllers) {
                 c.clear();
               }
@@ -511,6 +587,52 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildStatementField({
+    required String label,
+    required TextEditingController controller,
+    required bool enabled,
+    bool isLie = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            color: isLie ? Colors.redAccent : Colors.white70,
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+            letterSpacing: 1,
+          ),
+        ),
+        const SizedBox(height: 8),
+        AnimatedContainer(
+          duration: 200.ms,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: isLie ? Colors.redAccent.withValues(alpha: 0.3) : Colors.white10),
+          ),
+          child: TextField(
+            controller: controller,
+            style: const TextStyle(color: Colors.white),
+            maxLines: 2,
+            enabled: enabled,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppConstants.surfaceLight,
+              hintText: "Type here...",
+              hintStyle: const TextStyle(color: Colors.white24, fontSize: 14),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+        ),
+      ],
+    ).animate().fadeIn().slideY(begin: 0.1);
   }
 
   Widget _buildSetupControls(TwoTruthsProvider provider) {
@@ -532,26 +654,30 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Match Settings', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          const Text('Game Settings', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Rounds per player', style: TextStyle(color: AppConstants.textSecondary)),
+              const Text('Number of rounds', style: TextStyle(color: AppConstants.textSecondary)),
               const SizedBox(width: 12),
-              ...[1, 2, 3].map((r) {
-                final selected = _roundsPerPlayer == r;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(
-                    label: Text(r.toString()),
-                    selected: selected,
-                    selectedColor: AppConstants.primaryColor.withValues(alpha: 0.6),
-                    backgroundColor: Colors.white.withValues(alpha: 0.08),
-                    labelStyle: TextStyle(color: selected ? Colors.white : Colors.white70, fontWeight: FontWeight.w700),
-                    onSelected: (_) => setState(() => _roundsPerPlayer = r),
-                  ),
-                );
-              }),
+              Expanded(
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [3, 5, 7, 10, 0].map((r) {
+                    final selected = _totalRounds == r;
+                    return ChoiceChip(
+                      label: Text(r == 0 ? '∞' : r.toString()),
+                      selected: selected,
+                      selectedColor: AppConstants.primaryColor.withValues(alpha: 0.6),
+                      backgroundColor: Colors.white.withValues(alpha: 0.08),
+                      labelStyle: TextStyle(color: selected ? Colors.white : Colors.white70, fontWeight: FontWeight.w700),
+                      onSelected: (_) => setState(() => _totalRounds = r),
+                    );
+                  }).toList(),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -578,7 +704,7 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
     while (players.length < 2) {
       final name = _aiNames.firstWhere((n) => !existingNames.contains(n.toLowerCase()), orElse: () => 'AI-${players.length + 1}');
       existingNames.add(name.toLowerCase());
-      players.add(Player(id: 'ai_${const Uuid().v4()}', name: name));
+      players.add(Player(id: 'ai_${const Uuid().v4()}', name: name, avatar: '🤖'));
     }
     return players;
   }
@@ -587,6 +713,8 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
     if (_lastRoundNumber != provider.currentRoundNumber || _lastPhase != provider.phase) {
       _aiVotedThisRound.clear();
       _aiStorytellerSubmitted = false;
+      _lieRevealPlayed = false;
+      _lieFlash = false;
       _lastRoundNumber = provider.currentRoundNumber;
       _lastPhase = provider.phase;
     }
@@ -622,7 +750,18 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
     final targetVoters = provider.players.where((p) => p.id != provider.currentStoryteller?.id).toList();
     final remainingVoters = targetVoters.where((p) => !provider.currentRound!.votes.containsKey(p.id)).toList();
 
-    if (remainingVoters.isEmpty) return const Center(child: CircularProgressIndicator());
+    if (remainingVoters.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            CircularProgressIndicator(),
+            SizedBox(height: 12),
+            Text("Tallying votes...", style: TextStyle(color: Colors.white70)),
+          ],
+        ),
+      );
+    }
 
     final currentVoter = remainingVoters.first;
     _maybeAutoVote(provider, currentVoter);
@@ -661,12 +800,18 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
             itemCount: 3,
             itemBuilder: (context, index) {
               final statement = provider.currentRound!.statements[index];
+              final isSelected = provider.currentRound!.votes.containsKey(currentVoter.id) && provider.currentRound!.votes[currentVoter.id] == index;
               return Padding(
                 padding: const EdgeInsets.only(bottom: 16),
-                child: InkWell(
-                  onTap: () => provider.submitVote(currentVoter.id, index),
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
+                child: PremiumTap(
+                  onTap: provider.currentRound!.votes.containsKey(currentVoter.id)
+                      ? null
+                      : () {
+                          GameFeedbackService.tap();
+                          provider.submitVote(currentVoter.id, index);
+                        },
+                  child: AnimatedContainer(
+                    duration: 200.ms,
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
                       color: AppConstants.surfaceLight,
@@ -679,27 +824,36 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
                       textAlign: TextAlign.center,
                     ),
                   ),
-                ).animate().slideY(begin: 0.1, delay: (index * 100).ms).fadeIn(),
+                ).animate(target: isSelected ? 1 : 0).scale(begin: const Offset(1, 1), end: const Offset(1.02, 1.02)).slideY(begin: 0.1, delay: (index * 100).ms).fadeIn(),
               );
             },
           ),
         ),
         Padding(
           padding: const EdgeInsets.all(20),
-          child: Row(
-             mainAxisAlignment: MainAxisAlignment.center,
-             children: List.generate(targetVoters.length, (i) {
-               final hasVoted = provider.currentRound!.votes.containsKey(targetVoters[i].id);
-               return Container(
-                 width: 10,
-                 height: 10,
-                 margin: const EdgeInsets.symmetric(horizontal: 4),
-                 decoration: BoxDecoration(
-                   shape: BoxShape.circle,
-                   color: hasVoted ? AppConstants.successColor : Colors.white24
-                 ),
-               );
-             }),
+          child: Column(
+            children: [
+              Text(
+                "Waiting for others... ${provider.currentRound!.votes.length}/${targetVoters.length}",
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(targetVoters.length, (i) {
+                  final hasVoted = provider.currentRound!.votes.containsKey(targetVoters[i].id);
+                  return Container(
+                    width: 10,
+                    height: 10,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: hasVoted ? AppConstants.successColor : Colors.white24,
+                    ),
+                  );
+                }),
+              ),
+            ],
           ),
         )
       ],
@@ -709,10 +863,21 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
   // --- REVEAL PHASE ---
   Widget _buildRevealView(TwoTruthsProvider provider) {
     final correctIndex = provider.currentRound!.statements.indexWhere((s) => s.isLie);
+    final votersCount = provider.players.length - 1;
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _confettiController.play();
+      if (!_lieRevealPlayed) {
+        setState(() => _lieFlash = true);
+        SoundManager().playGameSound(SoundManager.sfxPop);
+        GameFeedbackService.success();
+        _lieRevealPlayed = true;
+        Future.delayed(const Duration(milliseconds: 420), () {
+          if (!mounted) return;
+          setState(() => _lieFlash = false);
+        });
+      }
     });
 
     return Column(
@@ -728,59 +893,120 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
               final isCorrectLie = index == correctIndex;
               final votersForThis = provider.currentRound!.votes.entries
                   .where((e) => e.value == index)
-                  .map((e) => provider.players.firstWhere((p) => p.id == e.key).name)
+                  .map((e) => provider.players.firstWhere((p) => p.id == e.key))
                   .toList();
 
-              return Padding(
+              final card = Padding(
                 padding: const EdgeInsets.only(bottom: 16),
-                child: Container(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 260),
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: isCorrectLie ? Colors.green.withValues(alpha: 0.1) : AppConstants.surfaceLight,
+                    color: isCorrectLie
+                        ? (_lieFlash ? Colors.greenAccent.withValues(alpha: 0.28) : Colors.green.withValues(alpha: 0.15))
+                        : AppConstants.surfaceLight,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: isCorrectLie ? Colors.greenAccent.withValues(alpha: 0.5) : Colors.white10,
                       width: isCorrectLie ? 2 : 1
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      if (isCorrectLie)
-                         const Padding(
-                           padding: EdgeInsets.only(bottom: 8),
-                           child: Text("THE LIE!", style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 12)),
-                         ),
-                      Text(
-                        statement.text,
-                        style: TextStyle(
-                          color: isCorrectLie ? Colors.white : Colors.white54,
-                          fontSize: 17,
-                          fontWeight: isCorrectLie ? FontWeight.bold : FontWeight.normal,
-                          decoration: !isCorrectLie ? TextDecoration.lineThrough : null,
+                  child: AnimatedScale(
+                    scale: (isCorrectLie && _lieFlash) ? 1.06 : 1.0,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutBack,
+                    child: Column(
+                      children: [
+                        if (isCorrectLie)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 8),
+                            child: Text("THE LIE!", style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 12)),
+                          ),
+                        Text(
+                          statement.text,
+                          style: TextStyle(
+                            color: isCorrectLie ? Colors.white : Colors.white54,
+                            fontSize: 17,
+                            fontWeight: isCorrectLie ? FontWeight.bold : FontWeight.normal,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      if (votersForThis.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          alignment: WrapAlignment.center,
-                          children: votersForThis.map((name) => Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: isCorrectLie ? Colors.green : Colors.redAccent,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(name, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                          )).toList(),
-                        )
+                        if (votersForThis.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.center,
+                            children: votersForThis.map((player) {
+                              final isCorrect = isCorrectLie;
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isCorrect ? Colors.green : Colors.redAccent,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(isCorrect ? Icons.check_circle : Icons.cancel, size: 12, color: Colors.white),
+                                    const SizedBox(width: 4),
+                                    Text(player.name, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          )
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ).animate().scale(delay: (index * 300).ms, duration: 500.ms).fadeIn(),
+                ),
               );
+
+              return card;
             },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                provider.storytellerWon ? "Storyteller fooled the group!" : "The group spotted the lie!",
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                "ROUND SUMMARY",
+                style: TextStyle(color: AppConstants.accentGold, letterSpacing: 2, fontWeight: FontWeight.bold, fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppConstants.surfaceLight,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      "Correct guesses: ${provider.lastCorrectGuesses}/$votersCount",
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      provider.storytellerWon ? "Storyteller bonus: +2" : "Storyteller bonus: +0",
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildMiniScoreboard(provider),
+            ],
           ),
         ),
         Padding(
@@ -791,9 +1017,10 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
               onPressed: () {
                 _confettiController.stop();
                 context.read<ProgressProvider>().recordGameResult(
-                  gameId: 'two_truths',
-                  won: false,
-                  xpAward: 15,
+                  gameId: 'game-two-truths',
+                  won: true,
+                  xpAward: 50,
+                  analytics: context.read<AnalyticsProvider>(),
                 );
                 provider.nextRound();
               },
@@ -802,7 +1029,7 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 18),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
-              child: const Text("CONTINUE", style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text("NEXT ROUND", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ),
         ),
@@ -813,6 +1040,11 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
   // --- SCOREBOARD PHASE ---
   Widget _buildScoreboardView(TwoTruthsProvider provider) {
     final sortedPlayers = [...provider.players]..sort((a, b) => b.score.compareTo(a.score));
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _confettiController.play();
+    });
 
     return Column(
       children: [
@@ -840,6 +1072,15 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
                 ),
                 child: Row(
                   children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: Colors.black26,
+                      child: Text(
+                        player.avatar ?? player.name[0].toUpperCase(),
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
                     Text(
                       "#${index + 1}",
                       style: TextStyle(
@@ -874,32 +1115,54 @@ class _TwoTruthsScreenState extends State<TwoTruthsScreen> {
         ),
         Padding(
           padding: const EdgeInsets.all(24.0),
-          child: Column(
-            children: [
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => provider.resetGame(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white10,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  child: const Text("PLAY AGAIN", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: () {
-                   provider.resetGame();
-                   Navigator.pop(context);
-                },
-                child: const Text("EXIT TO HUB", style: TextStyle(color: Colors.white54)),
-              ),
-            ],
+          child: GameOutcomeActions(
+            gameId: 'game-two-truths',
+            onReplay: () {
+              provider.restartGame();
+            },
+            onTryAnother: () {
+              provider.resetGame();
+              Navigator.pop(context);
+            },
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildMiniScoreboard(TwoTruthsProvider provider) {
+    final sortedPlayers = [...provider.players]..sort((a, b) => b.score.compareTo(a.score));
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        children: sortedPlayers.map((player) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: Colors.white12,
+                  child: Text(
+                    player.avatar ?? player.name[0].toUpperCase(),
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(player.name, style: const TextStyle(color: Colors.white70)),
+                ),
+                Text("${player.score}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 }

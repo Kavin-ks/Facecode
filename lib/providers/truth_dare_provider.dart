@@ -17,9 +17,14 @@ class TruthDareProvider extends ChangeNotifier {
   
   TdQuestion? _currentQuestion;
   bool _isLoading = false;
+  String? _errorMessage;
+  bool _useAIFallback = true;
   
   // Track used questions to avoid repeats within a session
   final Set<String> _sessionUsedQuestionIds = {};
+  
+  // Bookmarked questions
+  final Set<String> _bookmarkedQuestionIds = {};
 
   TruthDareMode? get mode => _mode;
   List<Player> get players => _players;
@@ -30,6 +35,9 @@ class TruthDareProvider extends ChangeNotifier {
   bool get safeMode => _safeMode;
   TdQuestion? get currentQuestion => _currentQuestion;
   bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
+  bool get useAIFallback => _useAIFallback;
+  Set<String> get bookmarkedQuestions => _bookmarkedQuestionIds;
 
   void setMode(TruthDareMode mode) {
     _mode = mode;
@@ -77,6 +85,18 @@ class TruthDareProvider extends ChangeNotifier {
 
   void setSafeMode(bool value) {
     _safeMode = value;
+    // Safe mode forces kids age group and clean categories
+    if (value) {
+      _selectedAgeGroup = TdAgeGroup.kids;
+      if (_selectedCategory == TdCategory.spicy || _selectedCategory == TdCategory.crazy) {
+        _selectedCategory = TdCategory.clean;
+      }
+    }
+    notifyListeners();
+  }
+
+  void setUseAIFallback(bool value) {
+    _useAIFallback = value;
     notifyListeners();
   }
 
@@ -90,13 +110,19 @@ class TruthDareProvider extends ChangeNotifier {
     
     _isLoading = true;
     _currentQuestion = null;
+    _errorMessage = null;
     notifyListeners();
 
     try {
+      // Apply safe mode filtering
+      final effectiveCategory = _safeMode && _selectedCategory == TdCategory.spicy 
+          ? TdCategory.clean 
+          : _selectedCategory;
+      
       final questions = await _service.getQuestions(
         type: type,
         ageGroup: _selectedAgeGroup,
-        category: _selectedCategory,
+        category: effectiveCategory,
         difficulty: _selectedDifficulty,
         orderByTrending: _selectedCategory == TdCategory.trending,
         orderByMostAsked: _selectedCategory == TdCategory.mostAsked,
@@ -120,13 +146,60 @@ class TruthDareProvider extends ChangeNotifier {
         
         // Fire and forget view tracking
         _service.incrementView(_currentQuestion!.id);
+      } else if (_useAIFallback) {
+        // Try AI generation
+        _currentQuestion = await _service.generateAIQuestion(
+          type: type,
+          ageGroup: _selectedAgeGroup,
+          category: effectiveCategory,
+          difficulty: _selectedDifficulty,
+        );
+        
+        if (_currentQuestion != null) {
+          _sessionUsedQuestionIds.add(_currentQuestion!.id);
+        } else {
+          _errorMessage = 'No questions found. Try changing your filters.';
+        }
+      } else {
+        _errorMessage = 'No questions found. Try changing your filters or enable AI fallback.';
       }
-    } catch (_) {
-      // Fallback handled in service, but if something catastrophic happens:
-      // We rely on the UI to show "No questions found" or previous state
+    } catch (e) {
+      _errorMessage = 'Failed to load questions. Check your connection.';
+
+      // Final fallback - try AI even if disabled in desperate situation
+      _currentQuestion ??= await _service.generateAIQuestion(
+        type: type,
+        ageGroup: _selectedAgeGroup,
+        category: _selectedCategory,
+        difficulty: _selectedDifficulty,
+      );
     }
 
     _isLoading = false;
+    notifyListeners();
+  }
+
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  Future<void> rateQuestion(bool isLike) async {
+    if (_currentQuestion == null) return;
+    await _service.rateQuestion(_currentQuestion!.id, isLike);
+  }
+
+  Future<void> toggleBookmark() async {
+    if (_currentQuestion == null) return;
+    
+    final isBookmarked = _bookmarkedQuestionIds.contains(_currentQuestion!.id);
+    if (isBookmarked) {
+      _bookmarkedQuestionIds.remove(_currentQuestion!.id);
+    } else {
+      _bookmarkedQuestionIds.add(_currentQuestion!.id);
+    }
+    
+    await _service.toggleBookmark(_currentQuestion!.id, !isBookmarked);
     notifyListeners();
   }
 

@@ -10,6 +10,7 @@ import 'package:facecode/screens/result_screen.dart';
 import 'package:facecode/utils/constants.dart';
 import 'package:facecode/widgets/emoji_picker.dart';
 import 'package:facecode/widgets/error_listener.dart';
+import 'package:facecode/widgets/afk_warning_overlay.dart';
 
 /// Premium main gameplay screen.
 ///
@@ -131,9 +132,18 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                         color: isEmoji ? AppConstants.neonPink : AppConstants.textMuted,
                       ),
                     ),
-                    trailing: isActive
-                        ? Icon(Icons.check_circle, color: AppConstants.successColor)
-                        : null,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (p.isAFK)
+                          const Padding(
+                            padding: EdgeInsets.only(right: 8.0),
+                            child: Text('😴', style: TextStyle(fontSize: 16)),
+                          ),
+                        if (isActive)
+                          Icon(Icons.check_circle, color: AppConstants.successColor),
+                      ],
+                    ),
                     onTap: () {
                       HapticFeedback.selectionClick();
                       provider.setActivePlayer(p.id);
@@ -283,6 +293,15 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                         child: CircularProgressIndicator(
                           color: AppConstants.primaryColor,
                         ),
+                      ),
+                    ),
+
+                  // AFK Warning Overlay
+                  if (provider.afkWarningPending)
+                    Container(
+                      color: Colors.black.withValues(alpha: 0.7),
+                      child: AFKWarningOverlay(
+                        onDismiss: () => provider.consumeAFKWarning(),
                       ),
                     ),
                 ],
@@ -454,6 +473,23 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                 ],
               ),
             ),
+            if (activePlayer.isAFK)
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Column(
+                  children: [
+                    const Text('😴', style: TextStyle(fontSize: 16)),
+                    Text(
+                      'AFK',
+                      style: TextStyle(
+                        color: AppConstants.errorColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ).animate(onPlay: (c) => c.repeat(reverse: true)).shimmer(duration: 2.seconds),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(

@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:facecode/utils/constants.dart';
 import 'package:facecode/screens/games/common/game_base_screen.dart';
 import 'package:facecode/screens/games/common/game_result_screen.dart';
 import 'package:facecode/utils/game_catalog.dart';
 import 'package:facecode/services/game_feedback_service.dart';
+import 'package:facecode/services/sound_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class TicTacToeScreen extends StatefulWidget {
   const TicTacToeScreen({super.key});
@@ -13,9 +16,9 @@ class TicTacToeScreen extends StatefulWidget {
   State<TicTacToeScreen> createState() => _TicTacToeScreenState();
 }
 
-class _TicTacToeScreenState extends State<TicTacToeScreen> {
+class _TicTacToeScreenState extends State<TicTacToeScreen> with TickerProviderStateMixin {
   final List<String> _board = List.filled(9, '');
-  bool _isXTurn = true; // X is Player, O is AI
+  bool _isXTurn = true; // X is Player, O is AI or Player 2
   bool _gameOver = false;
   bool _isThinking = false;
   String _status = "Your Turn";
@@ -23,6 +26,22 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
   int _playerScore = 0;
   int _aiScore = 0;
   int _draws = 0;
+
+  // Modes & progression
+  bool _isPvP = false;
+  String _aiDifficulty = 'Hard'; // Easy, Medium, Hard
+  bool _bestOf3 = false;
+  int _playerSets = 0;
+  int _aiSets = 0;
+
+  int _currentStreak = 0;
+  int _bestStreak = 0;
+  static const String _prefsDailyWins = 'tic_daily_wins';
+  int _dailyWins = 0;
+
+  // Animation controllers
+  late final AnimationController _winLineController;
+  final Random _rng = Random();
 
   static const List<List<int>> _winLines = [
     [0, 1, 2],
@@ -35,10 +54,58 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
     [2, 4, 6],
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _winLineController = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
+    _loadDailyWins();
+    SoundManager().init();
+  }
+
+  @override
+  void dispose() {
+    _winLineController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadDailyWins() async {
+    final prefs = await SharedPreferences.getInstance();
+    _dailyWins = prefs.getInt(_prefsDailyWins) ?? 0;
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _saveDailyWins() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_prefsDailyWins, _dailyWins);
+  }
+
   void _onTap(int index) {
-    if (_board[index].isNotEmpty || _gameOver || !_isXTurn || _isThinking) return;
+    if (_board[index].isNotEmpty || _gameOver || _isThinking) return;
 
     GameFeedbackService.tap();
+    SoundManager().playUiSound(SoundManager.sfxUiTap);
+
+    // PvP handling: if PvP allow both players to tap
+    if (_isPvP) {
+      setState(() {
+        _board[index] = _isXTurn ? 'X' : 'O';
+        _isXTurn = !_isXTurn;
+        _status = _isXTurn ? "Player X's Turn" : "Player O's Turn";
+      });
+      SoundManager().playGameSound(SoundManager.sfxTurnChange);
+
+      if (_checkWin(_board[index])) {
+        _endRound(_board[index] == 'X');
+      } else if (_isBoardFull()) {
+        _endRound(null);
+      }
+      return;
+    }
+
+    // PvAI
+    if (!_isXTurn) return; // wait for player turn
+
     setState(() {
       _board[index] = 'X';
       _isXTurn = false;
@@ -46,9 +113,9 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
     });
 
     if (_checkWin('X')) {
-      _endGame(true);
+      _endRound(true);
     } else if (_isBoardFull()) {
-      _endGame(null); // Draw
+      _endRound(null); // Draw
     } else {
       // AI Move
       _isThinking = true;
@@ -58,7 +125,18 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
 
   void _aiMove() {
     if (_gameOver || !mounted) return;
-    final move = _findBestMove();
+    int move;
+    switch (_aiDifficulty) {
+      case 'Easy':
+        move = _randomMove();
+        break;
+      case 'Medium':
+        move = _mediumMove();
+        break;
+      default:
+        move = _findBestMove(); // hard (minimax)
+    }
+
     if (move == -1) {
       _isThinking = false;
       return;
@@ -71,10 +149,12 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
       _isThinking = false;
     });
 
+    SoundManager().playGameSound(SoundManager.sfxTurnChange);
+
     if (_checkWin('O')) {
-      _endGame(false);
+      _endRound(false);
     } else if (_isBoardFull()) {
-      _endGame(null);
+      _endRound(null);
     }
   }
 
@@ -101,37 +181,76 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
     return !_board.contains('');
   }
 
-  void _endGame(bool? playerWon) {
+  void _endRound(bool? playerWon) {
     setState(() {
       _gameOver = true;
       if (playerWon == true) {
-        _status = "You Won!";
+        _status = _isPvP ? "Player X won" : "You Won!";
         _playerScore++;
+        _currentStreak++;
+        _bestStreak = max(_bestStreak, _currentStreak);
         GameFeedbackService.success();
+        SoundManager().playGameSound(SoundManager.sfxGameWin);
+        // award daily win
+        _dailyWins++;
+        _saveDailyWins();
       } else if (playerWon == false) {
-        _status = "AI Won!";
+        _status = _isPvP ? "Player O won" : "AI Won!";
         _aiScore++;
+        _currentStreak = 0;
         GameFeedbackService.error();
+        SoundManager().playGameSound(SoundManager.sfxGameFail);
       } else {
         _status = "Draw!";
         _draws++;
+        _currentStreak = 0;
         GameFeedbackService.tap();
       }
     });
 
-    Future.delayed(const Duration(seconds: 1), () {
-        if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-         MaterialPageRoute(
-           builder: (_) => GameResultScreen(
-             gameInfo: GameCatalog.allGames.firstWhere((g) => g.id == 'tic_tac_toe', orElse: () => GameCatalog.allGames[0]), 
-             score: playerWon == true ? 100 : (playerWon == null ? 20 : 0), 
-             isWin: playerWon == true, 
-             customMessage: _status,
-             onReplay: () => Navigator.of(context).pushReplacementNamed('/tic-tac-toe'),
-           )
-         )
-       );
+    // handle best-of-3 set counting
+    if (_bestOf3) {
+      if (playerWon == true) _playerSets++;
+      if (playerWon == false) _aiSets++;
+
+      if (_playerSets >= 2 || _aiSets >= 2) {
+        // series winner
+        Future.delayed(const Duration(milliseconds: 900), () {
+          if (!mounted) return;
+          final win = _playerSets > _aiSets;
+          final gameInfo = GameCatalog.allGames.firstWhere((g) => g.id == 'tic_tac_toe', orElse: () => GameCatalog.allGames[0]);
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => GameResultScreen(
+                gameInfo: gameInfo,
+                score: win ? 200 : 0,
+                isWin: win,
+                onReplay: () {
+                  Navigator.of(context).pop();
+                },
+                customMessage: win ? 'Series won!' : 'Great effort! Keep practicing.',
+              ),
+            ),
+          );
+        });
+        return;
+      }
+    }
+
+    // show winning animation line briefly
+    if (_winningLine != null) {
+      _winLineController.forward(from: 0);
+    }
+
+    Future.delayed(const Duration(milliseconds: 900), () {
+      if (!mounted) return;
+      // After a brief pause start next round or prompt result
+      if (!_bestOf3) {
+        _resetBoard();
+      } else {
+        // continue next game in set
+        _resetBoard();
+      }
     });
   }
 
@@ -142,7 +261,9 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
       child: Column(
         children: [
           _buildScoreHeader(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          _buildModeControls(),
+          const SizedBox(height: 12),
           _buildStatusPill(),
           const SizedBox(height: 24),
           Expanded(
@@ -172,9 +293,35 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _buildScoreChip("You", _playerScore, AppConstants.primaryColor),
+          Column(
+            children: [
+              Text("You", style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              const SizedBox(height: 4),
+              Text(
+                _playerScore.toString(),
+                style: TextStyle(color: AppConstants.primaryColor, fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              if (_bestOf3) ...[
+                const SizedBox(height: 6),
+                Text('Sets: $_playerSets', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              ],
+            ],
+          ),
           _buildScoreChip("Draws", _draws, AppConstants.textSecondary),
-          _buildScoreChip("AI", _aiScore, AppConstants.errorColor),
+          Column(
+            children: [
+              Text("AI", style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              const SizedBox(height: 4),
+              Text(
+                _aiScore.toString(),
+                style: TextStyle(color: AppConstants.errorColor, fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              if (_bestOf3) ...[
+                const SizedBox(height: 6),
+                Text('Sets: $_aiSets', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              ],
+            ],
+          ),
         ],
       ),
     );
@@ -188,6 +335,94 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
         Text(
           value.toString(),
           style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildModeControls() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            Switch.adaptive(
+              value: _isPvP,
+              onChanged: (v) {
+                setState(() {
+                  _isPvP = v;
+                  _resetBoard();
+                  _status = _isPvP ? 'Player X starts' : 'Your Turn';
+                });
+                SoundManager().playUiSound(SoundManager.sfxUiTap);
+              },
+            ),
+            const SizedBox(width: 8),
+            Text(_isPvP ? 'PvP' : 'PvAI', style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w700)),
+            const SizedBox(width: 12),
+            if (!_isPvP)
+              Row(
+                children: [
+                  const Text('Diff:', style: TextStyle(color: Colors.white54)),
+                  const SizedBox(width: 6),
+                  DropdownButton<String>(
+                    value: _aiDifficulty,
+                    dropdownColor: AppConstants.surfaceColor,
+                    items: ['Easy', 'Medium', 'Hard'].map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() => _aiDifficulty = v);
+                      SoundManager().playUiSound(SoundManager.sfxUiTap);
+                    },
+                  ),
+                ],
+              ),
+            const SizedBox(width: 12),
+            Row(
+              children: [
+                const Text('Best of 3', style: TextStyle(color: Colors.white54)),
+                const SizedBox(width: 6),
+                Switch.adaptive(
+                  value: _bestOf3,
+                  onChanged: (v) {
+                    setState(() {
+                      _bestOf3 = v;
+                      _playerSets = 0;
+                      _aiSets = 0;
+                    });
+                    SoundManager().playUiSound(SoundManager.sfxUiTap);
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: AppConstants.surfaceLight, borderRadius: BorderRadius.circular(12)),
+              child: Row(
+                children: [
+                  const Icon(Icons.emoji_events, color: AppConstants.warningColor, size: 14),
+                  const SizedBox(width: 6),
+                  Text('Wins: $_dailyWins', style: const TextStyle(color: Colors.white70)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(color: AppConstants.surfaceLight, borderRadius: BorderRadius.circular(12)),
+              child: Row(
+                children: [
+                  const Icon(Icons.local_fire_department, color: AppConstants.primaryColor, size: 14),
+                  const SizedBox(width: 6),
+                  Text('Streak: $_currentStreak', style: const TextStyle(color: Colors.white70)),
+                ],
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -330,6 +565,49 @@ class _TicTacToeScreenState extends State<TicTacToeScreen> {
       }
     }
     return bestMove;
+  }
+
+  int _randomMove() {
+    final empties = <int>[];
+    for (int i = 0; i < 9; i++) {
+      if (_board[i].isEmpty) {
+        empties.add(i);
+      }
+    }
+    if (empties.isEmpty) return -1;
+    return empties[_rng.nextInt(empties.length)];
+  }
+
+  int _mediumMove() {
+    // 1) Win if possible
+    for (int i=0;i<9;i++){
+      if (_board[i].isEmpty){
+        _board[i]='O';
+        if (_checkWin('O')){ _board[i]=''; return i; }
+        _board[i]='';
+      }
+    }
+    // 2) Block player win
+    for (int i=0;i<9;i++){
+      if (_board[i].isEmpty){
+        _board[i]='X';
+        if (_checkWin('X')){ _board[i]=''; return i; }
+        _board[i]='';
+      }
+    }
+    // 3) take center
+    if (_board[4].isEmpty) return 4;
+    // 4) take opposite corner
+    final corners = [0,2,6,8];
+    for (final c in corners) {
+      final opp = 8 - c;
+      if (_board[c]=='X' && _board[opp].isEmpty) return opp;
+    }
+    // 5) take any corner
+    final availableCorners = corners.where((c) => _board[c].isEmpty).toList();
+    if (availableCorners.isNotEmpty) return availableCorners[_rng.nextInt(availableCorners.length)];
+    // 6) fallback random
+    return _randomMove();
   }
 
   int _minimax(List<String> board, int depth, bool isMax) {

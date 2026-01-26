@@ -6,6 +6,11 @@ import 'package:facecode/providers/progress_provider.dart';
 import 'package:facecode/utils/constants.dart';
 import 'package:facecode/utils/game_catalog.dart';
 import 'package:facecode/widgets/premium_ui.dart';
+import 'package:facecode/widgets/ui_kit.dart';
+import 'package:facecode/widgets/daily_challenge_card.dart';
+
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:facecode/services/game_feedback_service.dart';
 
 /// Main Game Hub - Home screen showing all available mini-games
 class GameHubScreen extends StatefulWidget {
@@ -232,102 +237,9 @@ class _GameHubScreenState extends State<GameHubScreen> {
   }
 
   Widget _buildDailyChallenge() {
-    return Consumer<ProgressProvider>(
-      builder: (context, progress, _) {
-        final challengeGameId = progress.progress.dailyChallengeGameId;
-        final isCompleted = progress.progress.dailyChallengeCompleted;
-        
-        if (challengeGameId == null) return const SizedBox.shrink();
-        
-        final game = GameCatalog.getById(challengeGameId);
-        if (game == null) return const SizedBox.shrink();
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
-          child: NeonCard(
-            onTap: isCompleted ? null : () {
-              HapticFeedback.mediumImpact();
-              Navigator.pushNamed(context, game.route);
-            },
-            gradientColors: isCompleted 
-                ? [Colors.grey.shade700, Colors.grey.shade800]
-                : const [Color(0xFFFFD700), Color(0xFFFFA000)],
-            child: Row(
-              children: [
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: isCompleted
-                          ? [Colors.grey.shade600, Colors.grey.shade700]
-                          : AppConstants.goldGradient,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    isCompleted ? Icons.check_circle : Icons.stars,
-                    color: Colors.white,
-                    size: 32,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Text(
-                            '⭐ DAILY CHALLENGE',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: AppConstants.accentGold,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                          if (isCompleted) ...[
-                            const SizedBox(width: 8),
-                            const Icon(
-                              Icons.check_circle,
-                              size: 16,
-                              color: AppConstants.successColor,
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        isCompleted ? 'Completed! Come back tomorrow' : game.name,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppConstants.textPrimary,
-                        ),
-                      ),
-                      if (!isCompleted)
-                        Text(
-                          '+100 XP Bonus',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppConstants.textSecondary,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                if (!isCompleted)
-                  const Icon(
-                    Icons.arrow_forward_ios,
-                    color: AppConstants.textPrimary,
-                    size: 20,
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding),
+      child: DailyChallengeCard(),
     );
   }
 
@@ -357,7 +269,7 @@ class _GameHubScreenState extends State<GameHubScreen> {
     
     return Padding(
       padding: const EdgeInsets.only(right: 12),
-      child: GestureDetector(
+      child: PremiumTap(
         onTap: () {
           HapticFeedback.lightImpact();
           setState(() {
@@ -429,116 +341,182 @@ class _GameHubScreenState extends State<GameHubScreen> {
       ),
       itemCount: games.length,
       itemBuilder: (context, index) {
-        return _buildGameCard(games[index]);
+        // Staggered entrance using flutter_animate
+        return GameCard(game: games[index], index: index)
+            .animate(delay: (80 * index).ms)
+            .fadeIn(duration: 420.ms, curve: Curves.easeOut)
+            .slide(begin: const Offset(0, 0.06), end: const Offset(0, 0), duration: 420.ms, curve: Curves.easeOutBack)
+            .scaleXY(begin: 0.98, end: 1.0, duration: 420.ms, curve: Curves.elasticOut);
       },
     );
   }
 
-  Widget _buildGameCard(GameMetadata game) {
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.mediumImpact();
-        Navigator.pushNamed(context, game.route);
-      },
-      child: NeonCard(
-        padding: EdgeInsets.zero,
-        gradientColors: game.gradientColors,
-        child: Column(
-          children: [
-            // Icon Header
-            Container(
-              height: 100,
+}
+
+// Individual animated game card widget
+class GameCard extends StatefulWidget {
+  final GameMetadata game;
+  final int index;
+
+  const GameCard({super.key, required this.game, required this.index});
+
+  @override
+  State<GameCard> createState() => _GameCardState();
+}
+
+class _GameCardState extends State<GameCard> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  void _onTap() async {
+    GameFeedbackService.tap();
+    setState(() => _pressed = true);
+    await Future.delayed(const Duration(milliseconds: 160));
+    if (!mounted) return;
+    setState(() => _pressed = false);
+    HapticFeedback.mediumImpact();
+
+    // Navigate with a slight delay so the press animation is visible
+    Navigator.pushNamed(context, widget.game.route);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final game = widget.game;
+    final glowColor = game.category.color.withAlpha(100);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(begin: 1.0, end: _hovered ? 1.02 : (_pressed ? 0.98 : 1.0)),
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOutBack,
+        builder: (context, double scale, child) {
+          final translateY = _hovered ? -8.0 : (_pressed ? -4.0 : 0.0);
+          return Transform.translate(
+            offset: Offset(0, translateY),
+            child: Container(
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: game.gradientColors,
-                ),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(AppConstants.borderRadius),
-                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: _hovered ? glowColor : Colors.black.withAlpha(40),
+                    blurRadius: _hovered ? 28 : 12,
+                    offset: Offset(0, _hovered ? 12 : 6),
+                  ),
+                ],
               ),
-              child: Center(
-                child: Icon(
-                  game.icon,
-                  size: 50,
-                  color: Colors.white,
-                ),
+              child: Transform.scale(
+                scale: scale,
+                child: child,
               ),
             ),
-            
-            // Game Info
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      game.name,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppConstants.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          );
+        },
+        child: PremiumTap(
+          onTap: _onTap,
+          child: NeonCard(
+            padding: EdgeInsets.zero,
+            gradientColors: game.gradientColors,
+            child: Column(
+              children: [
+                // Icon Header
+                Container(
+                  height: 100,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: game.gradientColors,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      game.description,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppConstants.textSecondary,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(AppConstants.borderRadius),
                     ),
-                    const Spacer(),
-                    Row(
+                  ),
+                  child: Center(
+                    child: Icon(
+                      game.icon,
+                      size: 50,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+
+                // Game Info
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.people,
-                          size: 14,
-                          color: AppConstants.textMuted,
-                        ),
-                        const SizedBox(width: 4),
                         Text(
-                          '${game.minPlayers}-${game.maxPlayers}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppConstants.textMuted,
+                          game.name,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppConstants.textPrimary,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          game.description,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppConstants.textSecondary,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: game.category.color.withAlpha(40),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            game.category.name.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: game.category.color,
-                              letterSpacing: 0.5,
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.people,
+                              size: 14,
+                              color: AppConstants.textMuted,
                             ),
-                          ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${game.minPlayers}-${game.maxPlayers}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppConstants.textMuted,
+                              ),
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: game.category.color.withAlpha(40),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                game.category.name.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: game.category.color,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ).animate().fadeIn(duration: 500.ms).slideY(begin: 0.1, duration: 500.ms),
         ),
       ),
     );
   }
 }
+

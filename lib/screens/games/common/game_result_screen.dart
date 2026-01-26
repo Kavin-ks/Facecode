@@ -4,6 +4,8 @@ import 'package:facecode/utils/constants.dart';
 import 'package:facecode/models/game_metadata.dart';
 import 'package:facecode/providers/progress_provider.dart';
 import 'package:facecode/services/game_feedback_service.dart';
+import 'package:facecode/providers/analytics_provider.dart';
+import 'package:facecode/widgets/game/game_outcome_actions.dart';
 
 class GameResultScreen extends StatefulWidget {
   final GameMetadata gameInfo;
@@ -46,16 +48,25 @@ class _GameResultScreenState extends State<GameResultScreen> with SingleTickerPr
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_xpAwarded) {
         if (!mounted) return;
-        final xp = widget.isWin ? widget.gameInfo.xpReward : (widget.gameInfo.xpReward ~/ 4);
+        
+        // Consistent logic with ProgressProvider calculation
+        int xp = widget.gameInfo.xpReward;
+        if (!widget.isWin) {
+          xp = (xp ~/ 4).clamp(15, 1000000); // Ensures min 15 consolation XP
+        }
+        
         context.read<ProgressProvider>().recordGameResult(
           gameId: widget.gameInfo.id,
           won: widget.isWin,
           xpAward: xp,
+          analytics: context.read<AnalyticsProvider>(),
         );
+        
         if (widget.isWin) {
           GameFeedbackService.success();
         } else {
-          GameFeedbackService.error();
+          // Use neutral feedback for "Great Effort" instead of "error"
+          GameFeedbackService.tap();
         }
         _xpAwarded = true;
       }
@@ -122,10 +133,10 @@ class _GameResultScreenState extends State<GameResultScreen> with SingleTickerPr
               
               // Title
               Text(
-                widget.isWin ? 'VICTORY!' : 'GAME OVER',
+                widget.isWin ? 'VICTORY!' : 'GREAT EFFORT!',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: widget.isWin ? Colors.white : AppConstants.primaryColor,
                   fontSize: 32,
                   fontWeight: FontWeight.w900,
                   letterSpacing: 2,
@@ -136,7 +147,7 @@ class _GameResultScreenState extends State<GameResultScreen> with SingleTickerPr
               
               // Message
               Text(
-                widget.customMessage ?? (widget.isWin ? 'You are amazing!' : 'Better luck next time!'),
+                widget.customMessage ?? (widget.isWin ? _getWinMessage() : _getLossMessage()),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: AppConstants.textSecondary,
@@ -160,7 +171,7 @@ class _GameResultScreenState extends State<GameResultScreen> with SingleTickerPr
                       children: [
                         _buildStat('Score', '${widget.score}'),
                         Container(height: 40, width: 1, color: AppConstants.borderColor),
-                        _buildStat('XP Earned', '+${widget.isWin ? widget.gameInfo.xpReward : (widget.gameInfo.xpReward ~/ 4)}'),
+                        _buildStat('XP Earned', '+${widget.isWin ? widget.gameInfo.xpReward : (widget.gameInfo.xpReward ~/ 4).clamp(15, 1000000)}'),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -179,50 +190,27 @@ class _GameResultScreenState extends State<GameResultScreen> with SingleTickerPr
               const Spacer(),
               
               // Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            if (widget.onHome != null) {
-                              widget.onHome!();
-                            } else {
-                              Navigator.of(context).pop();
-                              Navigator.of(context).pop();
-                            }
-                          },
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            side: const BorderSide(color: AppConstants.primaryColor),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          child: const Text('Home'),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.of(context).pushReplacementNamed(widget.gameInfo.route);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppConstants.primaryColor,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          child: const Text(
-                            'Play Again',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
+              GameOutcomeActions(
+                gameId: widget.gameInfo.id,
+                onReplay: () {
+                  Navigator.of(context).pushReplacement(PageRouteBuilder(
+                    transitionDuration: const Duration(milliseconds: 420),
+                    pageBuilder: (context, anim1, anim2) => _ReplayRouteWrapper(routeName: widget.gameInfo.route),
+                    transitionsBuilder: (context, anim, secAnim, child) {
+                      return FadeTransition(opacity: anim, child: ScaleTransition(scale: Tween<double>(begin: 0.98, end: 1.0).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)), child: child));
+                    },
+                  ));
+                },
+                onTryAnother: () {
+                  if (widget.onHome != null) {
+                    widget.onHome!();
+                  } else {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
+              const SizedBox(height: 20),
                 ],
               ),
             ),
@@ -254,6 +242,44 @@ class _GameResultScreenState extends State<GameResultScreen> with SingleTickerPr
           ),
         ),
       ],
+    );
+  }
+
+  String _getWinMessage() {
+    final messages = [
+      'Outstanding performance!',
+      'You\'re on fire!',
+      'Absolutely brilliant!',
+      'Keep up the great work!',
+    ];
+    return messages[widget.score % messages.length];
+  }
+
+  String _getLossMessage() {
+    final messages = [
+      'Nice try! Keep practicing!',
+      'You\'ll get it next time!',
+      'Great effort!',
+      'Don\'t give up!',
+    ];
+    return messages[widget.score % messages.length];
+  }
+}
+
+// Small wrapper that navigates to a named route after build to enable transition animation
+class _ReplayRouteWrapper extends StatelessWidget {
+  final String routeName;
+  const _ReplayRouteWrapper({required this.routeName});
+
+  @override
+  Widget build(BuildContext context) {
+    // Post-frame navigate by name so route transition animation plays
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Navigator.of(context).pushReplacementNamed(routeName);
+    });
+    return Scaffold(
+      backgroundColor: AppConstants.backgroundColor,
+      body: const Center(child: CircularProgressIndicator()),
     );
   }
 }
